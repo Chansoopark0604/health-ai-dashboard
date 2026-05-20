@@ -337,7 +337,6 @@ elif disease_category == MENU_DIABETES:
         phys_act = st.sidebar.selectbox("한 달간 운동 여부", [0, 1], format_func=lambda x: "예" if x==1 else "아니오", help="한 달간 신체 활동 여부\n\n0: 운동 안함\n\n1: 운동 함")
 
         # --- 데이터 전처리 및 예측 ---
-        # 멘티의 컬럼 순서 유지: ['GenHlth', 'HighBP', 'Age', 'HighChol', 'BMI', 'PhysActivity']
         input_data = [[gen_hlth, high_bp, age, high_chol, bmi, phys_act]]
         input_df = pd.DataFrame(input_data, columns=['GenHlth', 'HighBP', 'Age', 'HighChol', 'BMI', 'PhysActivity'])
         
@@ -395,37 +394,42 @@ elif disease_category == MENU_DIABETES:
         df_vis = load_visual_data()
         import matplotlib.pyplot as plt
         import seaborn as sns
+        import matplotlib.font_manager as fm # 상단에 없다면 추가
+        
+        # 폰트 파일 경로 정의 및 폰트 객체 생성
+        font_path = "NanumGothic.ttf"
+        fe = fm.FontEntry(fname=font_path, name='NanumGothic')
+        fm.fontManager.ttflist.insert(0, fe) # 폰트 매니저 헤드에 강제 인서트
+        
+        # 명시적으로 사용할 폰트 프로퍼티 정의 (C언어의 구조체 정의와 유사)
+        korean_font = fm.FontProperties(fname=font_path)
         
         fig, ax = plt.subplots(figsize=(10, 4))
         
-        # 정상군과 당뇨군의 BMI 분포 KDE 곡선
+        # 분포도 그리기
         sns.kdeplot(data=df_vis[df_vis['Diabetes_binary'] == 0], x='BMI', fill=True, color="cornflowerblue", label="정상 그룹 밀집도 (Safe)", ax=ax)
         sns.kdeplot(data=df_vis[df_vis['Diabetes_binary'] == 1], x='BMI', fill=True, color="indianred", label="당뇨 그룹 밀집도 (Risk)", ax=ax)
         
-        # 환자의 현재 BMI 위치 시각화 (빨간 점선)
+        # 환자 마커
         ax.axvline(bmi, color='black', linestyle='--', linewidth=2.5, label=f"현재 환자 위치 (BMI: {bmi:.1f})")
-        
-        # 개선 목표 BMI 위치 시각화 (녹색 1점 쇄선)
         if 'simulated_bmi' in locals() and simulated_bmi < bmi:
             ax.axvline(simulated_bmi, color='green', linestyle='-.', linewidth=2.5, label=f"행동 개선 후 목표 위치 (BMI: {simulated_bmi:.1f})")
             
-        ax.set_title("전체 환자 통계 대비 나의 체질량지수(BMI) 위치 분석", fontsize=14, fontweight='bold')
-        ax.set_xlabel("BMI 지수")
-        ax.set_ylabel("데이터 밀집도 (Density)")
-        ax.legend(loc='upper right')
+        # 🔥 [핵심 변경 포인트] fontproperties 인자를 사용하여 시스템 캐시를 우회하고 직접 주입
+        ax.set_title("전체 환자 통계 대비 나의 체질량지수(BMI) 위치 분석", fontproperties=korean_font, fontsize=14, fontweight='bold')
+        ax.set_xlabel("BMI 지수", fontproperties=korean_font, fontsize=12)
+        ax.set_ylabel("데이터 밀집도 (Density)", fontproperties=korean_font, fontsize=12)
         
-        # X축 뷰포트(Viewport) 클리핑: 사이드바의 BMI 입력 슬라이더 제한(10.0 ~ 60.0)과 스케일을 완벽히 동기화합니다.
+        # 범례(Legend) 한글 깨짐 방지 처리
+        ax.legend(prop=korean_font, loc='upper right')
+        
         ax.set_xlim(10, 60)
-        
-        # Y축 눈금 제거
-        ax.set_yticks([])
-
-        # 배경을 깔끔하게 처리하여 심미성 극대화
+        ax.set_yticks([]) 
         fig.patch.set_facecolor('white')
         st.pyplot(fig)
         
     except FileNotFoundError:
-        st.warning("⚠️ 시각화용 원본 데이터셋('diabetes_binary_5050split_health_indicators_BRFSS2021.csv')을 동일 폴더에 배치해 주세요.")
+        st.warning("⚠️ 시각화용 원본 데이터셋 파일을 찾을 수 없습니다.")
 
 # --- 뇌졸중 선택 시 ---
 elif disease_category == MENU_STROKE:
