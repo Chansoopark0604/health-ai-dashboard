@@ -7,11 +7,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import shap
+import joblib
+import os
+import platform
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import confusion_matrix
 
-# --- 1. 페이지 기본 설정 ---
+# --- 페이지 기본 설정 ---
 st.set_page_config(
     page_title="통합 헬스케어 AI 포털",
     page_icon="🏥",
@@ -19,7 +22,26 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 2. 다중 모델 로드 및 학습 함수 (캐싱) ---
+# --- 시각화 폰트 Cross-Platform 동적 설정 로직 ---
+def set_korean_font():
+    system_name = platform.system()
+    if system_name == 'Windows':
+        # 윈도우 환경
+        plt.rc('font', family='Malgun Gothic')
+    elif system_name == 'Darwin':
+        # Mac OS 환경
+        plt.rc('font', family='AppleGothic')
+    elif system_name == 'Linux':
+        # 리눅스 환경 (Streamlit Cloud 배포 시)
+        plt.rc('font', family='NanumGothic')
+    
+    # 그래프 축의 마이너스(-) 기호가 깨지는 현상 방지
+    plt.rcParams['axes.unicode_minus'] = False
+
+# 함수 실행하여 전역(Global) 폰트 설정 적용
+set_korean_font()
+
+# --- 다중 모델 로드 및 학습 함수 (캐싱) ---
 @st.cache_resource
 def load_heart_model():
     df = pd.read_csv('heart.csv')
@@ -37,11 +59,18 @@ def load_heart_model():
 
     return model, scaler, X.columns, df
 
-# 향후 멘티들이 추가할 모델을 위한 자리 (뼈대 구축)
 @st.cache_resource
 def load_diabetes_model():
-    # TODO: 당뇨병 데이터 로드 및 학습 로직 추가
-    pass
+    model_path = 'diabetes_model.pkl'
+    scaler_path = 'scaler.pkl'
+    
+    if not os.path.exists(model_path) or not os.path.exists(scaler_path):
+        return None, None
+    
+    model = joblib.load(model_path)
+    scaler = joblib.load(scaler_path)
+    
+    return model, scaler
 
 @st.cache_resource
 def load_stroke_model():
@@ -51,15 +80,22 @@ def load_stroke_model():
 # 심장병 모델 자원 로드
 heart_model, heart_scaler, heart_cols, heart_df = load_heart_model()
 
+# 당뇨병 모델 로드 실행 
+diabetes_model, diabetes_scaler = load_diabetes_model()
 
-# --- 3. 사이드바 UI ---
+# --- 메뉴 상수 정의 ---
+MENU_HEART = "🫀 심혈관 질환 예측"
+MENU_DIABETES = "🩸 당뇨병 위험도 분석"
+MENU_STROKE = "🧠 뇌졸중 조기 경보 (준비중)"
+
 st.sidebar.title("🏥 종합 진단 센터")
-disease_category = st.sidebar.radio("진단 과목 선택", ["🫀 심혈관 질환 예측", "🩸 당뇨병 (준비중)", "🧠 뇌졸중 (준비중)"])
+# 상수가 저장된 리스트를 라디오 버튼에 주입
+disease_category = st.sidebar.radio("진단 과목 선택", [MENU_HEART, MENU_DIABETES, MENU_STROKE])
 
 st.sidebar.divider()
 
-# --- 4. 개별 질병 로직 (심혈관 질환 선택 시) ---
-if disease_category == "🫀 심혈관 질환 예측":
+# --- 심혈관 질환 선택 시 ---
+if disease_category == MENU_HEART:
     st.sidebar.header("📋 환자 임상 정보 입력")
     
     # 기본 정보
@@ -119,7 +155,7 @@ if disease_category == "🫀 심혈관 질환 예측":
             oldpeak = 0.0
 
     # --- 메인 화면 렌더링 ---
-    st.title("🫀 다중 모달리티 바이오/헬스케어 예측 시스템")
+    st.title("🫀 AI 기반 심혈관 질환 위험도 분석 예측 시스템")
     st.markdown("현재 **[심혈관 질환 부문]** 진단 모듈이 가동 중입니다. 좌측의 임상 데이터를 변경하여 실시간 예측을 확인하세요.")
     with st.expander("🚨 이용 전 필독: 의료적 면책 조항 확인", expanded=True):
         st.markdown("""
@@ -153,12 +189,12 @@ if disease_category == "🫀 심혈관 질환 예측":
         if prediction == 1:
             st.error("🚨 **위험 (High Risk)**: 심혈관 질환 발병 가능성이 높습니다.")
         else:
-            st.success("✅ **정상 (Low Risk)**: 심혈관 질환 발병 가능성이 낮습니다.")
-        st.metric(label="AI 예측 양성 확률", value=f"{prediction_proba * 100:.1f}%")
+            st.success("✅ **안전 (Low Risk)**: 심혈관 질환 발병 가능성이 낮습니다.")
+        st.metric(label="AI 예측 심혈관 질환 양성 확률", value=f"{prediction_proba * 100:.1f}%")
         st.progress(prediction_proba)
         st.divider()
         st.caption("""
-        :red[**⚠️ 의료적 면책 조항 (Medical Disclaimer)**]\n
+        :red[**⚠️ 주의사항**]\n
         본 시스템은 입력된 건강 데이터를 바탕으로 질병 위험도를 예측하고 생활습관 개선 정보를 제공하는 :red[**AI 기반 참고용 건강관리 도구**]입니다.\n
         본 결과는 질병의 진단, 치료, 예방 또는 의학적 처방을 목적으로 하지 않으며, :red[**전문 의료진의 진단이나 상담을 대체하지 않습니다.**]\n
         예측 결과가 낮게 나타나더라도 흉통, 호흡 곤란, 어지러움, 두근거림 등 이상 증상이 지속되면 :red[**반드시 의료기관을 방문하시기 바랍니다.**]\n
@@ -268,14 +304,136 @@ if disease_category == "🫀 심혈관 질환 예측":
             mime="text/plain"
         )
 
-# --- 5. 미구현 질병 선택 시 ---
-elif disease_category == "🩸 당뇨병 위험도 분석 (준비중)":
-    st.title("🩸 당뇨병 위험도 분석 (Data Loading...)")
-    st.info("현재 당뇨병 데이터 파이프라인 구축 및 학습을 진행 중입니다. 다음 세션에 활성화됩니다.")
-    # 멘티들이 여기에 당뇨병 코드를 채워넣게 됩니다.
+# --- 5. 당뇨병 선택 시 ---
+elif disease_category == MENU_DIABETES:
+    st.title("🩸 AI 기반 당뇨병 위험도 분석 및 행동 시뮬레이터")
+    
+    if diabetes_model is None or diabetes_scaler is None:
+        st.error("❌ 모델 또는 스케일러 파일('diabetes_model.pkl', 'scaler.pkl')을 찾을 수 없습니다. 파일 위치를 확인하세요.")
+    else:
+        st.markdown("현재 **[당뇨병 부문]** 진단 모듈이 가동 중입니다. 좌측의 임상 데이터를 변경하여 실시간 예측을 확인하세요.")
+        with st.expander("🚨 이용 전 필독: 의료적 면책 조항 확인", expanded=True):
+            st.markdown("""
+            <div style="border: 2px solid #ff4b4b; padding: 15px; border-radius: 5px; background-color: #fff1f1;">
+                <h4 style="color: #ff4b4b; margin-top: 0;">⚠️ 의료적 면책 조항</h4>
+                <p style="font-size: 0.9em; color: #31333f; line-height: 1.6;">
+                    본 시스템은 <strong>AI 기반 참고용 건강관리 도구</strong>입니다.<br>
+                    질병의 진단이나 처방을 목적으로 하지 않으며, <span style="color:red; font-weight:bold;">전문 의료진의 진단을 대체할 수 없습니다.</span><br><br>
+                    이상 증상 발생 시 <span style="color:red; font-weight:bold;">반드시 의료기관을 방문</span>하셔야 하며, 
+                    응급 상황 시에는 <span style="color:red; font-weight:bold;">즉시 119에 연락</span>하시기 바랍니다.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
 
-elif disease_category == "🧠 뇌졸중 조기 경보 (준비중)":
+        # --- 사이드바 UI 이식 ---
+        st.sidebar.header("📋 당뇨 위험인자 입력")
+        
+        gen_hlth = st.sidebar.slider("평소 건강 상태 (1:최고 ~ 5:최악)", 1, 5, 3, help="주관적인 본인의 건강상태\n\n1: 아주 좋음\n\n5: 아주 나쁨")
+        high_bp = st.sidebar.selectbox("고혈압 진단 여부", [0, 1], format_func=lambda x: "예" if x==1 else "아니오", help="고혈압 여부\n\n0: 없음\n\n1: 고혈압 진단받음")
+        high_chol = st.sidebar.selectbox("고콜레스테롤 여부", [0, 1], format_func=lambda x: "예" if x==1 else "아니오", help="고콜레스테롤 여부\n\n0: 없음\n\n1: 고콜레스테롤 진단받음")
+        age = st.sidebar.number_input("연령대 코드 (1~13)", 1, 13, 5, help="연령대 코드\n\n1: 18-24세   2: 25-29세  3: 30-34세  4: 35-39세  5: 40-44세\n\n6: 45-49세    7: 50-54세  8: 55-59세  9: 60-64세  10: 65-69세\n\n11: 70-74세 12: 75-79세 13: 80세 이상")
+        bmi = st.sidebar.number_input("BMI 지수", 10.0, 60.0, 25.0, step=0.1, help="체질량지수(BMI) = 체중(kg) / 키(m)²")
+        phys_act = st.sidebar.selectbox("한 달간 운동 여부", [0, 1], format_func=lambda x: "예" if x==1 else "아니오", help="한 달간 신체 활동 여부\n\n0: 운동 안함\n\n1: 운동 함")
+
+        # --- 데이터 전처리 및 예측 ---
+        # 멘티의 컬럼 순서 유지: ['GenHlth', 'HighBP', 'Age', 'HighChol', 'BMI', 'PhysActivity']
+        input_data = [[gen_hlth, high_bp, age, high_chol, bmi, phys_act]]
+        input_df = pd.DataFrame(input_data, columns=['GenHlth', 'HighBP', 'Age', 'HighChol', 'BMI', 'PhysActivity'])
+        
+        input_scaled = diabetes_scaler.transform(input_df)
+        prob = diabetes_model.predict_proba(input_scaled)[0][1] * 100
+
+        # --- 메인 화면 결과 출력 ---
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("진단 결과")
+            if prob >= 50:
+                st.error("🚨 **위험 (High Risk)**: 당뇨 발병 가능성이 매우 높습니다. 전문의 상담이 필요합니다.")
+            elif prob >= 30:
+                st.warning("⚠️ **주의 (Moderate Risk)**: 당뇨 발병 전단계일 가능성이 있습니다. 관리가 필요합니다.")
+            else:
+                st.success("✨ **안전 (Low Risk)**: 현재 혈당 관련 지표가 안정적입니다.")
+            
+            st.metric(label="AI 예측 당뇨 발병 확률", value=f"{prob:.1f}%")
+            st.progress(prob / 100.0)
+
+        # --- 혁신 기능: What-If 시뮬레이터 ---
+        with col2:
+            st.subheader("💡 라이프스타일 개선 시뮬레이션")
+            st.info("현재 상태에서 통제 가능한 요인(운동, 체중)을 개선했을 때의 효과를 계산합니다.")
+            
+            # 시나리오: 운동을 안하던 사람이 운동을 시작하고, BMI를 2.0 감량했을 때
+            simulated_bmi = max(10.0, bmi - 2.0) # BMI가 10 이하로 떨어지지 않게 방어 로직
+            simulated_act = 1 # 무조건 운동을 한다고 가정
+            
+            sim_df = pd.DataFrame([[gen_hlth, high_bp, age, high_chol, simulated_bmi, simulated_act]], 
+                                  columns=['GenHlth', 'HighBP', 'Age', 'HighChol', 'BMI', 'PhysActivity'])
+            sim_scaled = diabetes_scaler.transform(sim_df)
+            sim_prob = diabetes_model.predict_proba(sim_scaled)[0][1] * 100
+            
+            prob_diff = prob - sim_prob
+            
+            if prob_diff > 0:
+                st.metric(label="개선 후 예상 당뇨 발병 확률", value=f"{sim_prob:.1f}%", delta=f"-{prob_diff:.1f}% 감소", delta_color="inverse")
+                st.markdown(f"**Action Plan:** 한 달간 꾸준히 운동을 시작하고 체중을 조절하여 BMI를 2.0 낮추면, 당뇨 발병 위험을 **{prob_diff:.1f}%p** 낮출 수 있습니다.")
+            else:
+                st.metric(label="개선 후 예상 당뇨 발병 확률", value=f"{sim_prob:.1f}%", delta="추가 감소 여력 낮음", delta_color="off")
+                st.markdown("**Action Plan:** 현재 이미 훌륭한 생활 습관을 유지하고 있습니다. 지금의 운동량과 체중을 유지하세요.")
+        
+    st.divider()
+    st.subheader("📊 환자 건강 지표 상대적 포지셔닝 (BMI 기준)")
+    
+    # 원본 데이터를 메모리에 캐싱하여 로드 속도 최적화
+    @st.cache_data
+    def load_visual_data():
+        # 멘티가 업로드한 데이터셋 활용
+        return pd.read_csv('diabetes_binary_5050split_health_indicators_BRFSS2021.csv')
+    
+    try:
+        df_vis = load_visual_data()
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        
+        fig, ax = plt.subplots(figsize=(10, 4))
+        
+        # 정상군과 당뇨군의 BMI 분포 KDE 곡선
+        sns.kdeplot(data=df_vis[df_vis['Diabetes_binary'] == 0], x='BMI', fill=True, color="cornflowerblue", label="정상 그룹 밀집도 (Safe)", ax=ax)
+        sns.kdeplot(data=df_vis[df_vis['Diabetes_binary'] == 1], x='BMI', fill=True, color="indianred", label="당뇨 그룹 밀집도 (Risk)", ax=ax)
+        
+        # 환자의 현재 BMI 위치 시각화 (빨간 점선)
+        ax.axvline(bmi, color='black', linestyle='--', linewidth=2.5, label=f"현재 환자 위치 (BMI: {bmi:.1f})")
+        
+        # 개선 목표 BMI 위치 시각화 (녹색 1점 쇄선)
+        if 'simulated_bmi' in locals() and simulated_bmi < bmi:
+            ax.axvline(simulated_bmi, color='green', linestyle='-.', linewidth=2.5, label=f"행동 개선 후 목표 위치 (BMI: {simulated_bmi:.1f})")
+            
+        ax.set_title("전체 환자 통계 대비 나의 체질량지수(BMI) 위치 분석", fontsize=14, fontweight='bold')
+        ax.set_xlabel("BMI 지수")
+        ax.set_ylabel("데이터 밀집도 (Density)")
+        ax.legend(loc='upper right')
+        
+        # X축 뷰포트(Viewport) 클리핑: 사이드바의 BMI 입력 슬라이더 제한(10.0 ~ 60.0)과 스케일을 완벽히 동기화합니다.
+        ax.set_xlim(10, 60)
+        
+        # Y축 눈금 제거
+        ax.set_yticks([])
+
+        # 배경을 깔끔하게 처리하여 심미성 극대화
+        fig.patch.set_facecolor('white')
+        st.pyplot(fig)
+        
+    except FileNotFoundError:
+        st.warning("⚠️ 시각화용 원본 데이터셋('diabetes_binary_5050split_health_indicators_BRFSS2021.csv')을 동일 폴더에 배치해 주세요.")
+
+# --- 뇌졸중 선택 시 ---
+elif disease_category == MENU_STROKE:
     st.title("🧠 뇌졸중 조기 경보 (Data Loading...)")
     st.info("현재 뇌졸중 불균형 데이터(SMOTE) 최적화를 진행 중입니다. 다음 세션에 활성화됩니다.")
    
-    # python -m streamlit run health_dashboard.py
+# --- 정의되지 않은 카테고리 접근 시 (예외 처리) ---
+else:
+    st.error("🚨 시스템 라우팅 오류가 발생했습니다. 정의되지 않은 카테고리 접근입니다.")
+    st.warning("개발자 콘솔을 확인하거나 사이드바 상수를 동기화하십시오.")
+    
+# python -m streamlit run health_dashboard.py
