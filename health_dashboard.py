@@ -209,7 +209,7 @@ if disease_category == MENU_HEART:
         # 그래프 해석 가이드
         with st.expander("❓ 그래프 수치와 기호가 궁금하신가요?"):
             st.markdown("""
-            **변수 옆 좌측의 숫자 (예: 1.151)**
+            **좌측의 숫자 (예: 1.151)**
             - 인공지능이 판단을 내리기 위해 변환한 **상대적 위험 점수**입니다. 
             - 0보다 크면 평균보다 높은 상태, 작으면 낮은 상태를 의미합니다.
             
@@ -275,12 +275,22 @@ if disease_category == MENU_HEART:
         healthy_msg = medical_mapping.get(healthy_feature_name, healthy_feature_name)
 
         st.divider()
-        st.info(f"""
-        **📢 AI 종합 진단 소견**
-        * <span style='color:#ff4b4b; font-weight:bold;'>**주의가 필요한 요인**: 현재 입력하신 정보 중 **<span style='color:#ff4b4b; font-weight:bold;'>'{risk_feature_name} : {risk_msg}'** 항목이 당신의 심장 건강 위험을 높이는 가장 큰 원인입니다.
-        * <span style='color:#4b4bff; font-weight:bold;'>**긍정적인 건강 요인**: 반면 **<span style='color:#4b4bff; font-weight:bold;'>'{healthy_feature_name} : {healthy_msg}'** 항목은 현재 당신의 심장 건강을 유지하는 데 가장 긍정적인 기여를 하고 있습니다.
+        st.markdown(f"""
+        <div style="background-color: #f0f2f6; padding: 20px; border-radius: 8px; border-left: 6px solid #1f77b4; margin: 10px 0;">
+            <strong style="font-size: 16px; color: #0f172a; display: block; margin-bottom: 12px;">📢 AI 종합 진단 소견</strong>
+            <ul style="padding-left: 20px; margin: 0; list-style-type: disc;">
+                <li style="margin-bottom: 12px; color: #334155;">
+                    <span style='color:#ff4b4b; font-weight:bold;'>주의가 필요한 요인</span>: 
+                    현재 입력하신 정보 중 <span style='color:#ff4b4b; font-weight:bold;'>'{risk_feature_name} : {risk_msg}'</span> 항목이 당신의 심장 건강 위험을 높이는 가장 큰 원인입니다.
+                </li>
+                <li style="color: #334155;">
+                    <span style='color:#00cc96; font-weight:bold;'>긍정적인 건강 요인</span>: 
+                    반면 <span style='color:#00cc96; font-weight:bold;'>'{healthy_feature_name} : {healthy_msg}'</span> 항목은 현재 당신의 심장 건강을 유지하는 데 가장 긍정적인 기여를 하고 있습니다.
+                </li>
+            </ul>
+        </div>
         """, unsafe_allow_html=True)
-
+        
         # 리포트 텍스트 파일 생성
         report_text = f"""=== 다중 모달리티 헬스케어 AI 진단 리포트 ===
         [환자 입력 정보]
