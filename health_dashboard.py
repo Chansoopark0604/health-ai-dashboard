@@ -9,7 +9,7 @@ import seaborn as sns
 import shap
 import joblib
 import os
-import platform
+import matplotlib.font_manager as fm
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import confusion_matrix
@@ -22,24 +22,25 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 시각화 폰트 Cross-Platform 동적 설정 로직 ---
-def set_korean_font():
-    system_name = platform.system()
-    if system_name == 'Windows':
-        # 윈도우 환경
-        plt.rc('font', family='Malgun Gothic')
-    elif system_name == 'Darwin':
-        # Mac OS 환경
-        plt.rc('font', family='AppleGothic')
-    elif system_name == 'Linux':
-        # 리눅스 환경 (Streamlit Cloud 배포 시)
-        plt.rc('font', family='NanumGothic')
+# --- 크로스 플랫폼 정적 폰트 번들링 로직 ---
+@st.cache_resource
+def load_custom_font():
+    font_path = "NanumGothic.ttf" # 저장한 파일명과 정확히 일치해야 합니다.
     
-    # 그래프 축의 마이너스(-) 기호가 깨지는 현상 방지
-    plt.rcParams['axes.unicode_minus'] = False
+    if not os.path.exists(font_path):
+        st.error(f"🚨 폰트 파일을 찾을 수 없습니다: {font_path}")
+        return None
+        
+    font_prop = fm.FontProperties(fname=font_path)
+    font_name = font_prop.get_name()
+    
+    plt.rc('font', family=font_name)
+    plt.rcParams['axes.unicode_minus'] = False # 마이너스 기호 깨짐 방지
+    
+    return font_name
 
-# 함수 실행하여 전역(Global) 폰트 설정 적용
-set_korean_font()
+# 함수 실행 (메모리에 한 번만 적재)
+load_custom_font()
 
 # --- 다중 모델 로드 및 학습 함수 (캐싱) ---
 @st.cache_resource
