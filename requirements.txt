@@ -6,3 +6,5 @@ seaborn
 shap
 scikit-learn==1.2.2
 joblib
+os
+platform
