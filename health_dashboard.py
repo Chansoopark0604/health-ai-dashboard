@@ -97,7 +97,7 @@ st.sidebar.divider()
 
 # --- 심혈관 질환 선택 시 ---
 if disease_category == MENU_HEART:
-    st.sidebar.header("📋 환자 임상 정보 입력")
+    st.sidebar.header("📋 나의 건강 지표 입력")
     
     # 기본 정보
     age = st.sidebar.slider("나이 (Age)", 20, 100, 50)
@@ -277,9 +277,9 @@ if disease_category == MENU_HEART:
         st.divider()
         st.info(f"""
         **📢 AI 종합 진단 소견**
-        * **주의가 필요한 요인**: 현재 입력하신 정보 중 **'{risk_feature_name} : {risk_msg}'** 항목이 당신의 심장 건강 위험을 높이는 가장 큰 원인입니다.
-        * **긍정적인 건강 요인**: 반면 **'{healthy_feature_name} : {healthy_msg}'** 항목은 현재 당신의 심장 건강을 유지하는 데 가장 긍정적인 기여를 하고 있습니다.
-        """)
+        * <span style='color:#ff4b4b; font-weight:bold;'>**주의가 필요한 요인**: 현재 입력하신 정보 중 **<span style='color:#ff4b4b; font-weight:bold;'>'{risk_feature_name} : {risk_msg}'** 항목이 당신의 심장 건강 위험을 높이는 가장 큰 원인입니다.
+        * <span style='color:#4b4bff; font-weight:bold;'>**긍정적인 건강 요인**: 반면 **<span style='color:#4b4bff; font-weight:bold;'>'{healthy_feature_name} : {healthy_msg}'** 항목은 현재 당신의 심장 건강을 유지하는 데 가장 긍정적인 기여를 하고 있습니다.
+        """, unsafe_allow_html=True)
 
         # 리포트 텍스트 파일 생성
         report_text = f"""=== 다중 모달리티 헬스케어 AI 진단 리포트 ===
@@ -307,7 +307,7 @@ if disease_category == MENU_HEART:
 
 # --- 5. 당뇨병 선택 시 ---
 elif disease_category == MENU_DIABETES:
-    st.title("🩸 AI 기반 당뇨병 위험도 분석 및 행동 시뮬레이터")
+    st.title("🩸 AI 기반 당뇨병 발병 위험도 예측 및 시뮬레이터")
     
     if diabetes_model is None or diabetes_scaler is None:
         st.error("❌ 모델 또는 스케일러 파일('diabetes_model.pkl', 'scaler.pkl')을 찾을 수 없습니다. 파일 위치를 확인하세요.")
