@@ -1,5 +1,5 @@
-# [T-SUM_2026-1_Proj.ipynb] AI 심혈관 질환 예측 시스템 대시보드 (Streamlit)
-# 2026.05.07. 최종 수정
+# [T-SUM_2026-1_Proj] AI 심혈관 질환 예측 시스템 대시보드 (Streamlit)
+# 2026.05.21. 최종 수정
 
 import streamlit as st
 import pandas as pd
@@ -8,11 +8,15 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import shap
 import joblib
-import os
+import warnings, os
+import matplotlib.patches as mpatches
 import matplotlib.font_manager as fm
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score
+warnings.filterwarnings('ignore')
 
 # --- 페이지 기본 설정 ---
 st.set_page_config(
@@ -75,14 +79,72 @@ def load_diabetes_model():
 
 @st.cache_resource
 def load_stroke_model():
-    # TODO: 뇌졸중 데이터 로드 및 학습 로직 추가
-    pass
+    """CSV로 RandomForest 모델 학습 후 반환"""
+    # CSV 경로 탐색
+    candidates = [
+        'healthcare-dataset-stroke-data.csv',
+        os.path.join(os.path.dirname(__file__), 'healthcare-dataset-stroke-data.csv'),
+    ]
+    df = None
+    for path in candidates:
+        if os.path.exists(path):
+            df = pd.read_csv(path, na_values=['N/A', 'Unknown'])
+            break
+
+    if df is None:
+        return None, None, None
+
+    df = df[df['gender'] != 'Other']
+    df['bmi'] = df['bmi'].fillna(df['bmi'].median())
+    df['smoking_status'] = df['smoking_status'].fillna(df['smoking_status'].mode()[0])
+
+    df['smoking_status'] = df['smoking_status'].map({'never smoked': 0, 'formerly smoked': 1, 'smokes': 2})
+    df['ever_married']   = df['ever_married'].map({'No': 0, 'Yes': 1})
+    df['Residence_type'] = df['Residence_type'].map({'Rural': 0, 'Urban': 1})
+    df['gender']         = df['gender'].map({'Female': 0, 'Male': 1})
+
+    df['Age_over_55']          = (df['age'] >= 55).astype(int)
+    df['Obesity']              = (df['bmi'] >= 30).astype(int)
+    df['Diabetic']             = (df['avg_glucose_level'] >= 126).astype(int)
+    df['age_x_hypertension']   = df['age'] * df['hypertension']
+    df['age_x_heart_disease']  = df['age'] * df['heart_disease']
+    df['glucose_x_age']        = df['avg_glucose_level'] * df['age'] / 1000
+    df['risk_score'] = (
+        df['hypertension'] + df['heart_disease'] +
+        df['Age_over_55'] + df['Obesity'] + df['Diabetic'] +
+        (df['smoking_status'] == 2).astype(int)
+    )
+
+    X = df.drop(['id', 'stroke'], axis=1)
+    y = df['stroke']
+    X_enc = pd.get_dummies(X, columns=['work_type'], dtype=int)
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X_enc, y, test_size=0.2, stratify=y, random_state=42
+    )
+
+    model = RandomForestClassifier(
+        n_estimators=500, max_depth=10,
+        class_weight='balanced_subsample',
+        min_samples_leaf=2, max_features='sqrt',
+        random_state=42, n_jobs=-1
+    )
+    model.fit(X_train, y_train)
+
+    auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
+    return model, X_enc.columns.tolist(), round(auc, 4)
+
+THRESHOLD_HIGH   = 0.30
+THRESHOLD_MEDIUM = 0.15
 
 # 심장병 모델 자원 로드
 heart_model, heart_scaler, heart_cols, heart_df = load_heart_model()
 
 # 당뇨병 모델 로드 실행 
 diabetes_model, diabetes_scaler = load_diabetes_model()
+
+# 뇌졸중 모델 로드 실행
+stroke_model, stroke_cols, stroke_auc = load_stroke_model()
 
 # --- 메뉴 상수 정의 ---
 MENU_HEART = "🫀 심혈관 질환 예측"
@@ -443,9 +505,410 @@ elif disease_category == MENU_DIABETES:
 
 # --- 뇌졸중 선택 시 ---
 elif disease_category == MENU_STROKE:
-    st.title("🧠 뇌졸중 조기 경보 (Data Loading...)")
-    st.info("현재 뇌졸중 불균형 데이터(SMOTE) 최적화를 진행 중입니다. 다음 세션에 활성화됩니다.")
-   
+    def get_risk_level(prob: float):
+        if prob >= THRESHOLD_HIGH:
+            return "고위험", "#e53e3e", "🔴"
+        elif prob >= THRESHOLD_MEDIUM:
+            return "중위험", "#dd6b20", "🟠"
+        else:
+            return "저위험", "#38a169", "🟢"
+
+    def get_risk_class(prob: float):
+        if prob >= THRESHOLD_HIGH:   return "risk-high"
+        elif prob >= THRESHOLD_MEDIUM: return "risk-medium"
+        return "risk-low"
+
+    def get_recommendations(inputs: dict, prob: float) -> list[dict]:
+        """
+        각 위험인자 분석 후 우선순위 권고사항 반환
+        반환: [{'priority': '즉시', 'icon': '🚨', 'message': '...', 'detail': '...'}, ...]
+        """
+        recs = []
+
+        # 혈압
+        if inputs['hypertension']:
+            recs.append({
+                'priority': '즉시', 'color': 'red',
+                'icon': '💊',
+                'message': '고혈압 관리 강화',
+                'detail': '혈압 목표: 수축기 130mmHg 미만. 저염식(하루 소금 5g 이하), 규칙적 복약, 주 2회 이상 혈압 측정 필요.'
+            })
+
+        # 심장질환
+        if inputs['heart_disease']:
+            recs.append({
+                'priority': '즉시', 'color': 'red',
+                'icon': '❤️‍🩹',
+                'message': '심장 전문의 정기 추적',
+                'detail': '6개월마다 심전도·심초음파 검사 권장. 항응고제 또는 항혈소판제 복용 여부를 의사와 상의하세요.'
+            })
+
+        # 혈당
+        if inputs['avg_glucose_level'] >= 126:
+            recs.append({
+                'priority': '즉시', 'color': 'red',
+                'icon': '🩸',
+                'message': '혈당 조절 필요 (당뇨 의심)',
+                'detail': f'현재 혈당 {inputs["avg_glucose_level"]:.0f}mg/dL — 당화혈색소(HbA1c) 검사 권장. 탄수화물 섭취 제한, 식후 혈당 모니터링.'
+            })
+        elif inputs['avg_glucose_level'] >= 100:
+            recs.append({
+                'priority': '주의', 'color': 'orange',
+                'icon': '🩸',
+                'message': '공복혈당 장애 (전당뇨 구간)',
+                'detail': f'현재 혈당 {inputs["avg_glucose_level"]:.0f}mg/dL — 정상 범위(70-99)를 초과. 정제 탄수화물·당류 섭취 줄이기, 연 1회 당뇨 검사 권장.'
+            })
+
+        # 비만
+        if inputs['bmi'] >= 30:
+            recs.append({
+                'priority': '주의', 'color': 'orange',
+                'icon': '⚖️',
+                'message': '체중 감량 권고 (비만)',
+                'detail': f'현재 BMI {inputs["bmi"]:.1f} — 5~10% 체중 감량만으로도 뇌졸중 위험 유의미하게 감소. 주 150분 이상 중강도 운동 권장.'
+            })
+        elif inputs['bmi'] >= 25:
+            recs.append({
+                'priority': '관찰', 'color': 'orange',
+                'icon': '⚖️',
+                'message': '과체중 — 체중 유지 권고',
+                'detail': f'현재 BMI {inputs["bmi"]:.1f} — 정상 범위(18.5-24.9) 초과. 식이 조절과 규칙적 운동으로 체중 유지.'
+            })
+
+        # 흡연
+        if inputs['smoking_status'] == 2:
+            recs.append({
+                'priority': '즉시', 'color': 'red',
+                'icon': '🚭',
+                'message': '즉시 금연 필요',
+                'detail': '흡연은 뇌졸중 위험을 2배 이상 증가. 금연 후 5년 내 위험도 비흡연자 수준으로 회복. 금연 클리닉·니코틴 대체요법 활용 권장.'
+            })
+        elif inputs['smoking_status'] == 1:
+            recs.append({
+                'priority': '관찰', 'color': 'orange',
+                'icon': '🚭',
+                'message': '과거 흡연 이력 — 지속 금연 유지',
+                'detail': '금연 유지 중이라면 계속 이어가세요. 혈관 기능은 금연 후에도 서서히 회복됩니다.'
+            })
+
+        # 나이
+        if inputs['age'] >= 75:
+            recs.append({
+                'priority': '주의', 'color': 'orange',
+                'icon': '🏥',
+                'message': '고령 — 연 1회 뇌혈관 정밀 검사 권고',
+                'detail': '75세 이상은 뇌졸중 위험이 급격히 증가. MRI·MRA 뇌혈관 검사, 경동맥 초음파 검사 권장.'
+            })
+        elif inputs['age'] >= 55:
+            recs.append({
+                'priority': '관찰', 'color': 'orange',
+                'icon': '🏥',
+                'message': '55세 이상 — 정기 뇌혈관 검진 권고',
+                'detail': '2년마다 뇌혈관 건강 체크. 혈압·혈당·콜레스테롤 동시 관리.'
+            })
+
+        # 저위험 + 개선사항 없을 때
+        if not recs and prob < THRESHOLD_MEDIUM:
+            recs.append({
+                'priority': '양호', 'color': 'green',
+                'icon': '✅',
+                'message': '현재 위험인자 없음 — 건강 유지 권고',
+                'detail': '규칙적 운동, 균형 잡힌 식단, 금연·절주를 유지하면 뇌졸중 위험을 최소화할 수 있습니다. 연 1회 기본 건강검진 권장.'
+            })
+
+        # 우선순위 정렬
+        priority_order = {'즉시': 0, '주의': 1, '관찰': 2, '양호': 3}
+        recs.sort(key=lambda x: priority_order.get(x['priority'], 9))
+        return recs
+
+    def predict(model, feature_cols: list, inputs: dict) -> float:
+        smoking_num  = inputs['smoking_status']
+        married_num  = 1 if inputs['ever_married'] == 'Yes' else 0
+        residence_num = 1 if inputs['Residence_type'] == 'Urban' else 0
+        gender_num   = 1 if inputs['gender'] == 'Male' else 0
+
+        row = {
+            'gender':              gender_num,
+            'age':                 inputs['age'],
+            'hypertension':        int(inputs['hypertension']),
+            'heart_disease':       int(inputs['heart_disease']),
+            'ever_married':        married_num,
+            'Residence_type':      residence_num,
+            'avg_glucose_level':   inputs['avg_glucose_level'],
+            'bmi':                 inputs['bmi'],
+            'smoking_status':      smoking_num,
+            'Age_over_55':         int(inputs['age'] >= 55),
+            'Obesity':             int(inputs['bmi'] >= 30),
+            'Diabetic':            int(inputs['avg_glucose_level'] >= 126),
+            'age_x_hypertension':  inputs['age'] * int(inputs['hypertension']),
+            'age_x_heart_disease': inputs['age'] * int(inputs['heart_disease']),
+            'glucose_x_age':       inputs['avg_glucose_level'] * inputs['age'] / 1000,
+            'risk_score': (
+                int(inputs['hypertension']) + int(inputs['heart_disease']) +
+                int(inputs['age'] >= 55) + int(inputs['bmi'] >= 30) +
+                int(inputs['avg_glucose_level'] >= 126) + int(smoking_num == 2)
+            ),
+            # work_type 원-핫
+            'work_type_Govt_job':      int(inputs['work_type'] == 'Govt_job'),
+            'work_type_Never_worked':  int(inputs['work_type'] == 'Never_worked'),
+            'work_type_Private':       int(inputs['work_type'] == 'Private'),
+            'work_type_Self-employed': int(inputs['work_type'] == 'Self-employed'),
+            'work_type_children':      int(inputs['work_type'] == 'children'),
+        }
+
+        df_input = pd.DataFrame([row])
+        # 모델 학습 시 사용된 컬럼과 정렬 맞춤
+        for c in feature_cols:
+            if c not in df_input.columns:
+                df_input[c] = 0
+        df_input = df_input[feature_cols]
+
+        prob = model.predict_proba(df_input)[0][1]
+        return float(prob)
+
+    def draw_gauge(prob: float):
+        import matplotlib.font_manager as fm
+
+        # 한글 폰트 직접 탐색
+        _korean_fonts = [
+            'Malgun Gothic', 'AppleGothic', 'NanumGothic', 'NanumBarunGothic',
+            'UnDotum', 'Noto Sans CJK KR', 'Noto Sans KR', 'DejaVu Sans'
+        ]
+        _available = {f.name for f in fm.fontManager.ttflist}
+        _font = next((f for f in _korean_fonts if f in _available), 'DejaVu Sans')
+
+        fig, ax = plt.subplots(figsize=(4, 2.2), subplot_kw=dict(aspect='equal'))
+        fig.patch.set_alpha(0)
+        ax.set_axis_off()
+
+        # 호 배경 (회색)
+        theta = np.linspace(np.pi, 0, 200)
+        ax.plot(np.cos(theta), np.sin(theta), lw=22, color='#e2e8f0', solid_capstyle='butt', transform=ax.transData)
+
+        # 호 채우기
+        fill_theta = np.linspace(np.pi, np.pi - np.pi * prob, 200)
+        color = '#e53e3e' if prob >= THRESHOLD_HIGH else '#dd6b20' if prob >= THRESHOLD_MEDIUM else '#38a169'
+        ax.plot(np.cos(fill_theta), np.sin(fill_theta), lw=22, color=color, solid_capstyle='butt')
+
+        # 중앙 텍스트
+        fp = fm.FontProperties(family=_font)
+        ax.text(0, -0.05, f"{prob*100:.1f}%", ha='center', va='center',
+                fontsize=26, fontweight='bold', color=color, fontproperties=fp)
+        ax.text(0, -0.42, '뇌졸중 위험 확률', ha='center', va='center',
+                fontsize=9, color='#718096', fontproperties=fp)
+
+        ax.set_xlim(-1.2, 1.2)
+        ax.set_ylim(-0.6, 1.1)
+        return fig
+
+    def main():
+        # 헤더
+        st.markdown("## 🧠 뇌졸중 위험도 예측")
+        st.markdown("개인 건강 정보를 입력하면 AI가 뇌졸중 위험도를 분석하고 맞춤 개선사항을 제공합니다.")
+        st.markdown("---")
+
+        # 모델 로드
+        stroke_model, stroke_cols, stroke_auc = load_stroke_model()
+        if stroke_model is None:
+            st.error("⚠️ `healthcare-dataset-stroke-data.csv` 파일을 앱과 같은 폴더에 넣어주세요.")
+            st.stop()
+
+        st.caption(f"모델 성능 — ROC-AUC: **{stroke_auc}** | 학습 데이터: 5,109명 | 위험 임계값: ≥30% 고위험")
+
+        # ── 입력 폼 ──────────────────────────────────────────
+        with st.form("input_form"):
+            st.markdown('<div class="section-title">📋 건강 정보 입력</div>', unsafe_allow_html=True)
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                st.markdown("**기본 정보**")
+                gender    = st.selectbox("성별",      ["여성", "남성"], index=1)
+                age       = st.slider("나이", 1, 82, 45)
+                married   = st.selectbox("결혼 여부", ["미혼", "기혼"], index=1)
+                residence = st.selectbox("거주 지역", ["시골", "도시"], index=1)
+                work_type = st.selectbox("직업 유형", ["회사원", "자영업/프리랜서", "공무원", "학생", "무직"])
+
+            with col2:
+                st.markdown("**건강 수치**")
+                glucose = st.number_input("평균 혈당 수치 (mg/dL)", 50.0, 300.0, 90.0, step=1.0,
+                                        help="공복 혈당 기준: 정상 70-99 / 전당뇨 100-125 / 당뇨 ≥126")
+                bmi     = st.number_input("BMI (체질량 지수)", 10.0, 60.0, 24.0, step=0.1,
+                                        help="정상 18.5-24.9 / 과체중 25-29.9 / 비만 ≥30")
+
+                st.markdown("")
+                st.markdown("**BMI 참고 기준**")
+                st.markdown("🟢 정상: 18.5–24.9 &nbsp; 🟠 과체중: 25–29.9 &nbsp; 🔴 비만: ≥30",
+                            unsafe_allow_html=True)
+
+            with col3:
+                st.markdown("**기저질환 및 생활습관**")
+                hypertension  = st.checkbox("고혈압 진단 이력", value=False)
+                heart_disease = st.checkbox("심장질환 진단 이력", value=False)
+                smoking = st.selectbox("흡연 상태", [
+                    "never smoked", "formerly smoked", "smokes"
+                ], format_func=lambda x: {
+                    "never smoked": "비흡연",
+                    "formerly smoked": "과거 흡연 (현재 금연)",
+                    "smokes": "현재 흡연 중"
+                }[x])
+
+                st.markdown("")
+                st.info("💡 모든 정보는 예측에만 사용되며 저장되지 않습니다.")
+
+            submitted = st.form_submit_button("🔍 위험도 분석하기", use_container_width=True, type="primary")
+
+        # ── 결과 출력 ─────────────────────────────────────────
+        if submitted:
+            gender_map    = {"여성": "Female",       "남성": "Male"}
+            married_map   = {"미혼": "No",           "기혼": "Yes"}
+            residence_map = {"시골": "Rural",        "도시": "Urban"}
+            work_map      = {
+            "회사원":          "Private",
+            "자영업/프리랜서": "Self-employed",
+            "공무원":          "Govt_job",
+            "학생":            "children",
+            "무직":            "Never_worked",
+            }
+            smoking_map = {"never smoked": 0, "formerly smoked": 1, "smokes": 2}
+            
+            inputs = {
+            'gender':            gender_map[gender],
+            'age':               age,
+            'ever_married':      married_map[married],
+            'Residence_type':    residence_map[residence],
+            'work_type':         work_map[work_type],
+            'avg_glucose_level': glucose,
+            'bmi':               bmi,
+            'hypertension':      hypertension,
+            'heart_disease':     heart_disease,
+            'smoking_status':    smoking_map[smoking],
+            }
+
+            prob       = predict(stroke_model, stroke_cols, inputs)
+            level, color, emoji = get_risk_level(prob)
+            risk_class = get_risk_class(prob)
+            recs       = get_recommendations(inputs, prob)
+
+            st.markdown("---")
+            st.markdown("### 📊 분석 결과")
+
+            res_col1, res_col2 = st.columns([1, 2])
+
+            # 왼쪽: 게이지 + 등급
+            with res_col1:
+                st.pyplot(draw_gauge(prob), use_container_width=True)
+                plt.close()
+
+                badge_color_map = {'고위험': 'risk-high', '중위험': 'risk-medium', '저위험': 'risk-low'}
+                st.markdown(f"""
+                <div class="risk-card {risk_class}" style="text-align:center; padding:16px;">
+                    <div style="font-size:2.2rem;">{emoji}</div>
+                    <div style="font-size:1.6rem; font-weight:800; color:{color};">{level}</div>
+                    <div style="font-size:0.9rem; color:#4a5568; margin-top:6px;">
+                        {'뇌졸중 위험이 높습니다. 즉시 의료 전문가와 상담하세요.' if level == '고위험'
+                        else '일부 위험인자가 있습니다. 생활습관 개선이 필요합니다.' if level == '중위험'
+                        else '현재 위험도는 낮습니다. 건강한 생활을 유지하세요.'}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # 오른쪽: 위험인자 요약 + 권고사항
+            with res_col2:
+                # 위험인자 현황 요약
+                st.markdown('<div class="section-title">⚠️ 위험인자 현황</div>', unsafe_allow_html=True)
+
+                factor_cols = st.columns(3)
+                factors = [
+                    ("나이",        f"{age}세",         age >= 55),
+                    ("혈당",        f"{glucose:.0f} mg/dL", glucose >= 126),
+                    ("BMI",        f"{bmi:.1f}",        bmi >= 30),
+                    ("고혈압",      "있음" if hypertension else "없음",   hypertension),
+                    ("심장질환",    "있음" if heart_disease else "없음",  heart_disease),
+                    ("흡연",        {0: "비흡연", 1: "과거흡연", 2: "현재흡연"}[smoking_map[smoking]],
+                                smoking_map[smoking] == 2),
+                ]
+
+                for i, (name, val, is_risk) in enumerate(factors):
+                    with factor_cols[i % 3]:
+                        icon = "🔴" if is_risk else "🟢"
+                        bg   = "#fff0f0" if is_risk else "#f0fff4"
+                        bc   = "#e53e3e" if is_risk else "#38a169"
+                        st.markdown(f"""
+                        <div style="background:{bg}; border:1.5px solid {bc}; border-radius:10px;
+                                    padding:10px 12px; text-align:center; margin-bottom:8px;">
+                            <div style="font-size:1.1rem;">{icon}</div>
+                            <div style="font-size:0.78rem; color:#718096; font-weight:600;">{name}</div>
+                            <div style="font-size:1rem; font-weight:700; color:{bc};">{val}</div>
+                        </div>""", unsafe_allow_html=True)
+
+            # 개선 권고사항
+            st.markdown("---")
+            st.markdown("### 💡 맞춤 개선 권고사항")
+
+            if not recs:
+                st.success("현재 뚜렷한 위험인자가 없습니다. 건강한 생활습관을 유지하세요!")
+            else:
+                priority_colors = {'즉시': '🔴', '주의': '🟠', '관찰': '🟡', '양호': '🟢'}
+                badge_bg = {'즉시': ('#fed7d7','#c53030'), '주의': ('#feebc8','#c05621'),
+                            '관찰': ('#fefcbf','#744210'), '양호': ('#c6f6d5','#276749')}
+
+                for rec in recs:
+                    bg, fc = badge_bg.get(rec['priority'], ('#eee','#333'))
+                    with st.expander(f"{rec['icon']} {rec['message']}  {priority_colors.get(rec['priority'],'')} **[{rec['priority']}]**", expanded=(rec['priority']=='즉시')):
+                        st.markdown(f"""
+                        <div style="background:#f8fafc; border-radius:8px; padding:14px 16px;
+                                    border-left:4px solid {fc};">
+                            <span style="background:{bg}; color:{fc}; padding:2px 10px;
+                                border-radius:12px; font-size:0.8rem; font-weight:700;">
+                                {rec['priority']} 조치
+                            </span>
+                            <p style="margin-top:10px; color:#2d3748; line-height:1.7;">{rec['detail']}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+            # 면책 조항
+            st.markdown("---")
+            st.caption(
+                "⚕️ **의료 면책 조항**: 이 예측 결과는 공개 데이터셋(n=5,109)으로 학습된 AI 모델의 참고 정보로, "
+                "의학적 진단을 대체하지 않습니다. 건강에 이상이 있거나 결과가 고위험으로 나온 경우 반드시 "
+                "의료 전문가와 상담하세요."
+            )
+
+        # 사이드바 — 위험 기준 안내
+        with st.sidebar:
+            st.markdown("### 📌 위험도 판단 기준")
+            st.markdown("""
+    | 등급 | 확률 | 설명 |
+    |------|------|------|
+    | 🔴 고위험 | ≥ 30% | 즉시 전문의 상담 |
+    | 🟠 중위험 | 15~30% | 생활습관 개선 필요 |
+    | 🟢 저위험 | < 15% | 정기 관리 권고 |
+
+    **임계값 근거**  
+    모델 임계값 0.30 적용 시:
+    - 뇌졸중 탐지율: **80%**
+    - 오탐율: 23.7%
+    - ROC-AUC: **0.817**
+
+    의료 맥락에서는 뇌졸중을 놓치지 않는 것(민감도)이 최우선입니다.
+            """)
+
+            st.markdown("---")
+            st.markdown("### 🩺 주요 위험인자")
+            st.markdown("""
+    - **나이** (55세 이상 시 위험 급증)
+    - **고혈압** (수축기 ≥140mmHg)
+    - **심장질환** (심방세동 포함)
+    - **혈당** (≥126mg/dL = 당뇨)
+    - **BMI** (≥30 = 비만)
+    - **흡연** (현재 흡연)
+            """)
+
+
+    if __name__ == "__main__" or True:
+        main()
+
 # --- 정의되지 않은 카테고리 접근 시 (예외 처리) ---
 else:
     st.error("🚨 시스템 라우팅 오류가 발생했습니다. 정의되지 않은 카테고리 접근입니다.")
