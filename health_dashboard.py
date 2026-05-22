@@ -147,9 +147,9 @@ diabetes_model, diabetes_scaler = load_diabetes_model()
 stroke_model, stroke_cols, stroke_auc = load_stroke_model()
 
 # --- 메뉴 상수 정의 ---
-MENU_HEART = "🫀 심혈관 질환 예측"
-MENU_DIABETES = "🩸 당뇨병 위험도 분석"
-MENU_STROKE = "🧠 뇌졸중 조기 경보 (준비중)"
+MENU_HEART = "🫀 심혈관 질환"
+MENU_DIABETES = "🩸 당뇨병"
+MENU_STROKE = "🧠 뇌졸중"
 
 st.sidebar.title("🏥 종합 진단 센터")
 # 상수가 저장된 리스트를 라디오 버튼에 주입
@@ -159,63 +159,43 @@ st.sidebar.divider()
 
 # --- 심혈관 질환 선택 시 ---
 if disease_category == MENU_HEART:
-    st.sidebar.header("📋 나의 건강 지표 입력")
-    
-    # 기본 정보
-    age = st.sidebar.slider("나이 (Age)", 20, 100, 50)
-    sex = st.sidebar.selectbox("성별 (Sex)", ['M', 'F'])
-    chest_pain = st.sidebar.selectbox(
-    "가슴 통증 유형", 
-    ['TA', 'ATA', 'NAP', 'ASY'],
-    help="""
-    - TA: 전형적인 가슴 통증
-    - ATA: 비전형적 통증
-    - NAP: 심장과 무관해 보이는 통증
-    - ASY: 무증상 (통증은 없으나 검사상 이상 소견)
-    * 잘 모르시겠다면 '정상' 범위인 TA나 NAP를 선택해 보세요.
-    """
-    )
-    resting_bp = st.sidebar.number_input("안정시 혈압 (RestingBP)", 80, 200, 120, help="편안하게 쉬고 있을 때 측정한 수축기 혈압입니다.\n\n정상 수치는 보통 120 이하입니다.")
-    cholesterol = st.sidebar.number_input("혈청 콜레스테롤 (Cholesterol)", 0, 600, 200, help="혈액 내 콜레스테롤 수치(mg/dl)입니다.\n\n200 이상일 경우 주의가 필요합니다.")
-    fasting_bs = st.sidebar.selectbox("공복 혈당 > 120 mg/dl (FastingBS)", [0, 1], help="1: 공복혈당 120 초과(당뇨 의심)\n\n0: 정상")
-    max_hr = st.sidebar.slider("최대 심박수 (MaxHR)", 60, 202, 150, help="운동 중 도달한 가장 높은 심박수입니다.")
-    exercise_angina = st.sidebar.selectbox("운동 유발성 협심증 (ExerciseAngina)", ['Y', 'N'], help="운동을 할 때 흉통이 유발되는지 여부입니다.")
-
-    # 정밀 검사 정보 (Expander)
-    with st.sidebar.expander("🩺 정밀 심전도(ECG) 검사 기록이 있다면 펼쳐주세요"):
-        st.info("검사 기록을 모르신다면, 건강한 상태(정상치)를 가정하고 진단을 진행합니다.")
-        know_ecg = st.checkbox("심전도 검사 결과를 알고 있습니다.")
+    # 사이드바: AI 모델 신뢰도 및 검증 패널 (Model Card)
+    with st.sidebar:
+        st.markdown("### 🔬 AI 모델 검증 리포트")
+        st.info("본 예측 알고리즘은 글로벌 임상 표준 데이터셋을 기반으로 학습 및 교차 검증(Cross-Validation)을 완료했습니다.")
         
-        if know_ecg:
-            resting_ecg = st.selectbox(
-                "안정시 심전도 (RestingECG)", 
-                ['Normal', 'ST', 'LVH'],
-                help="Normal: 정상\n\nST: 심전도 파형 이상(ST-T파 이상)\n\nLVH: 좌심실 비대 의심 소견입니다."
-            )
-            st_slope_label = st.selectbox(
-                "운동 시 심장 압박감 정도 (ST Slope)",
-                ["운동 시에도 가뿐함 (정상)", "운동 시 가슴에 무거운 압박감이나 뻐근함이 지속됨", "운동 시 쥐어짜는 듯한 통증이나 심한 호흡 곤란 발생"],
-                help="운동 강도가 높을 때 심장 근육의 혈류 반응을 나타냅니다."
-            )
-            
-            # 내부 매핑 로직
-            slope_map = {
-                "운동 시에도 가뿐함 (정상)": "Up",
-                "운동 시 가슴에 무거운 압박감이나 뻐근함이 지속됨": "Flat",
-                "운동 시 쥐어짜는 듯한 통증이나 심한 호흡 곤란 발생": "Down"
-            }
-            st_slope = slope_map[st_slope_label]
-            
-            oldpeak = st.slider(
-                "ST 하강 수치 (Oldpeak)", 
-                -2.0, 6.0, 0.0, 0.1,
-                help="휴식 대비 운동 시 심전도가 얼마나 낮아졌는지 나타내는 수치입니다.\n\n수치가 높을수록 심장 부담이 큼을 의미합니다."
-            )
-        else:
-            # 사용자가 모를 경우 의학적 정상(Baseline) 값 강제 할당
-            resting_ecg = 'Normal'
-            st_slope = 'Up'
-            oldpeak = 0.0
+        st.markdown("#### 📊 **데이터 프로비넌스 (Data)**")
+        st.markdown("""
+        - **기반 데이터**: 다국적 심혈관 임상 코호트 데이터
+        - **학습 규모**: 총 918명 임상 환자 케이스
+        - **입력 변수**: 11개 주요 심혈관 생체 지표
+        """)
+        
+        st.divider()
+        
+        st.markdown("#### 🎯 **알고리즘 성능 지표**")
+        # 컬럼을 나누어 가독성 높은 메트릭 렌더링
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.metric(label="예측 정확도 (Accuracy)", value="86.8%")
+        with col_b:
+            st.metric(label="ROC-AUC Score", value="0.91")
+        st.caption("* 알고리즘: `RandomForestClassifier` (n_estimators=100)")
+        
+        st.divider()
+        
+        st.markdown("#### ⚖️ **주요 판단 가중치 (Global)**")
+        st.markdown("""
+        AI가 심혈관 질환을 판별할 때 통계적으로 가장 중요하게 작용하는 상위 3개 임상 지표입니다.
+        1. **ST_Slope** (운동 시 심전도 파형 반응)
+        2. **ChestPainType** (흉통의 임상적 양상)
+        3. **Oldpeak** (운동 유발 심전도 하강도)
+        """)
+        
+        st.divider()
+        
+        st.markdown("#### 🛡️ **보안 및 개인정보 보호**")
+        st.caption("본 시스템은 환자의 식별정보(PII)를 서버에 저장하지 않으며, 제출된 데이터는 메모리 내 휘발성 연산(In-memory processing) 후 즉시 폐기됩니다.")
 
     # --- 메인 화면 렌더링 ---
     st.title("🫀 AI 기반 심혈관 질환 위험도 분석 예측 시스템")
@@ -232,153 +212,287 @@ if disease_category == MENU_HEART:
             </p>
         </div>
         """, unsafe_allow_html=True)
+    st.markdown("---")
 
-    user_input_data = {
+    with st.form("cardio_health_form"):
+        st.subheader("📋 환자 건강 지표 및 임상 데이터 입력")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("##### **[기본 신체 및 혈관 지표]**")
+            age = st.slider("나이 (Age)", 20, 100, 50)
+            sex = st.selectbox("성별 (Sex)", ['M', 'F'])
+            
+            resting_bp = st.number_input(
+                "안정시 혈압 (RestingBP)", 
+                80, 200, 120, 
+                help="편안하게 쉬고 있을 때 측정한 수축기 혈압입니다. (정상치: 120 이하)"
+            )
+            
+            cholesterol = st.number_input(
+                "혈청 콜레스테롤 (Cholesterol)", 
+                0, 600, 200, 
+                help="혈액 내 콜레스테롤 수치(mg/dl)입니다. (주의치: 200 이상)"
+            )
+
+        with col2:
+            st.markdown("##### **[심장 부하 및 기능 지표]**")
+            chest_pain = st.selectbox(
+                "가슴 통증 유형", 
+                ['TA', 'ATA', 'NAP', 'ASY'],
+                help="TA: 전형적 통증, ATA: 비전형적 통증, NAP: 심장 무관 통증, ASY: 무증상 이상소견"
+            )
+            
+            fasting_bs = st.selectbox(
+                "공복 혈당 > 120 mg/dl (FastingBS)", 
+                [0, 1], 
+                format_func=lambda x: "1 (공복혈당 초과)" if x == 1 else "0 (정상)",
+                help="1: 공복혈당 120 초과(당뇨 의심), 0: 정상"
+            )
+            
+            max_hr = st.slider(
+                "최대 심박수 (MaxHR)", 
+                60, 202, 150, 
+                help="운동 부하 검사 중 도달한 가장 높은 심박수입니다."
+            )
+            
+            exercise_angina = st.selectbox(
+                "운동 유발성 협심증 (ExerciseAngina)", 
+                ['Y', 'N'], 
+                help="운동 시 흉통이 유발되는지 여부입니다."
+            )
+
+        st.divider()
+        
+        # 3. 정밀 검사 정보 (메인 화면 내부의 Expander 배치)
+        st.markdown("##### **[정밀 진단 옵션]**")
+        with st.expander("🩺 정밀 심전도(ECG) 검사 기록이 있다면 입력하세요"):
+            st.info("검사 기록이 없는 경우, 임상 표준 정상치(Baseline)를 기준으로 진단 알고리즘이 가동됩니다.")
+            
+            resting_ecg = st.selectbox(
+                "안정시 심전도 (RestingECG)", 
+                ['Normal', 'ST', 'LVH'],
+                index=0, # 'Normal'이 기본 선택되도록 보장
+                help="Normal: 정상, ST: ST-T파 이상, LVH: 좌심실 비대 소견"
+            )
+            
+            st_slope_label = st.selectbox(
+                "운동 시 심장 압박감 정도 (ST Slope)",
+                ["운동 시에도 가뿐함 (정상)", "운동 시 가슴에 무거운 압박감이나 뻐근함이 지속됨", "운동 시 쥐어짜는 듯한 통증이나 심한 호흡 곤란 발생"],
+                index=0, # '정상'이 기본 선택되도록 보장
+                help="운동 강도가 높을 때 심장 근육의 혈류 반응 상태를 타겟팅합니다."
+            )
+            
+            # 내부 맵핑 데이터 가공 처리
+            slope_map = {
+                "운동 시에도 가뿐함 (정상)": "Up",
+                "운동 시 가슴에 무거운 압박감이나 뻐근함이 지속됨": "Flat",
+                "운동 시 쥐어짜는 듯한 통증이나 심한 호흡 곤란 발생": "Down"
+            }
+            st_slope = slope_map[st_slope_label]
+            
+            oldpeak = st.slider(
+                "ST 하강 수치 (Oldpeak)", 
+                -2.0, 6.0, 0.0, 0.1, # 기본값(value)을 0.0으로 명시적 고정
+                help="휴식 대비 운동 시 심전도 하강 파형 크기입니다. 수치가 높을수록 관상동맥 질환 가능성이 큽니다."
+            )
+
+        # 4. 최종 분석 실행 버튼 (Form 내부 스코프의 엔드포인트)
+        cardio_submit = st.form_submit_button("🚀 심혈관 질환 위험도 분석 시작")
+
+    # 5. 분석 제어 로직 (Form 외부 배치)
+    if cardio_submit:
+        st.success("✅ 임상 데이터 정상 수집 완료. 백엔드 AI 모델 파이프라인 연산을 시작합니다.")
+        st.markdown("---")
+
+        user_input_data = {
         'Age': age, 'RestingBP': resting_bp, 'Cholesterol': cholesterol, 'FastingBS': fasting_bs,
         'MaxHR': max_hr, 'Oldpeak': oldpeak, 'Sex': sex, 'ChestPainType': chest_pain.split(" ")[0], # 한글 설명 제외하고 코드(ASY 등)만 추출
         'RestingECG': resting_ecg, 'ExerciseAngina': exercise_angina, 'ST_Slope': st_slope
-    }
-    user_df = pd.DataFrame([user_input_data])
-    user_encoded = pd.get_dummies(user_df)
-    user_encoded = user_encoded.reindex(columns=heart_cols, fill_value=0)
-    user_scaled = heart_scaler.transform(user_encoded)
+        }
+        user_df = pd.DataFrame([user_input_data])
+        user_encoded = pd.get_dummies(user_df)
+        user_encoded = user_encoded.reindex(columns=heart_cols, fill_value=0)
+        user_scaled = heart_scaler.transform(user_encoded)
 
-    prediction = heart_model.predict(user_scaled)[0]
-    prediction_proba = heart_model.predict_proba(user_scaled)[0][1]
+        prediction = heart_model.predict(user_scaled)[0]
+        prediction_proba = heart_model.predict_proba(user_scaled)[0][1]
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("진단 결과")
-        if prediction == 1:
-            st.error("🚨 **위험 (High Risk)**: 심혈관 질환 발병 가능성이 높습니다.")
-        else:
-            st.success("✅ **안전 (Low Risk)**: 심혈관 질환 발병 가능성이 낮습니다.")
-        st.metric(label="AI 예측 심혈관 질환 양성 확률", value=f"{prediction_proba * 100:.1f}%")
-        st.progress(prediction_proba)
-        st.divider()
-        st.caption("""
-        :red[**⚠️ 주의사항**]\n
-        본 시스템은 입력된 건강 데이터를 바탕으로 질병 위험도를 예측하고 생활습관 개선 정보를 제공하는 :red[**AI 기반 참고용 건강관리 도구**]입니다.\n
-        본 결과는 질병의 진단, 치료, 예방 또는 의학적 처방을 목적으로 하지 않으며, :red[**전문 의료진의 진단이나 상담을 대체하지 않습니다.**]\n
-        예측 결과가 낮게 나타나더라도 흉통, 호흡 곤란, 어지러움, 두근거림 등 이상 증상이 지속되면 :red[**반드시 의료기관을 방문하시기 바랍니다.**]\n
-        예측 결과가 높게 나타난 경우에도 :red[**실제 질병 여부는 전문의의 진료와 정밀 검사를 통해 확인되어야 합니다.**]\n
-        AI 예측 및 권고안은 :red[**부정확**]하거나 :red[**불완전**]할 수 있으며, 응급상황에서는 본 시스템을 사용하지 말고 :red[**즉시 119 또는 가까운 응급의료기관에 연락하시기 바랍니다.**]
-        """)
-
-    with col2:
-        st.subheader("🕵️ AI 심층 분석 리포트 (XAI)")
-        
-        # 그래프 해석 가이드
-        with st.expander("❓ 그래프 수치와 기호가 궁금하신가요?"):
-            st.markdown("""
-            **좌측의 숫자 (예: 1.151)**
-            - 인공지능이 판단을 내리기 위해 변환한 **상대적 위험 점수**입니다. 
-            - 0보다 크면 평균보다 높은 상태, 작으면 낮은 상태를 의미합니다.
-            
-            **막대 속 숫자 및 색상**
-            - **빨간색 (+)**: 심장병 위험도를 **높이는** 부정적 신호입니다.
-            - **파란색 (-)**: 심장병 위험도를 **낮추는** 긍정적(건강한) 신호입니다.
-            - **맨 아래 E[f(x)]**: 데이터셋 전체의 **평균 발병 확률**(출발점)입니다.
-            - **맨 위 f(x)**: 모든 요인을 더하고 뺀 **최종 위험 확률**입니다.
+        col1, col2 = st.columns(2)
+        with col1:
+            st.subheader("진단 결과")
+            if prediction == 1:
+                st.error("🚨 **위험 (High Risk)**: 심혈관 질환 발병 가능성이 높습니다.")
+            else:
+                st.success("✅ **안전 (Low Risk)**: 심혈관 질환 발병 가능성이 낮습니다.")
+            st.metric(label="AI 예측 심혈관 질환 양성 확률", value=f"{prediction_proba * 100:.1f}%")
+            st.progress(prediction_proba)
+            st.divider()
+            st.caption("""
+            :red[**⚠️ 주의사항**]\n
+            본 시스템은 입력된 건강 데이터를 바탕으로 질병 위험도를 예측하고 생활습관 개선 정보를 제공하는 :red[**AI 기반 참고용 건강관리 도구**]입니다.\n
+            본 결과는 질병의 진단, 치료, 예방 또는 의학적 처방을 목적으로 하지 않으며, :red[**전문 의료진의 진단이나 상담을 대체하지 않습니다.**]\n
+            예측 결과가 낮게 나타나더라도 흉통, 호흡 곤란, 어지러움, 두근거림 등 이상 증상이 지속되면 :red[**반드시 의료기관을 방문하시기 바랍니다.**]\n
+            예측 결과가 높게 나타난 경우에도 :red[**실제 질병 여부는 전문의의 진료와 정밀 검사를 통해 확인되어야 합니다.**]\n
+            AI 예측 및 권고안은 :red[**부정확**]하거나 :red[**불완전**]할 수 있으며, 응급상황에서는 본 시스템을 사용하지 말고 :red[**즉시 119 또는 가까운 응급의료기관에 연락하시기 바랍니다.**]
             """)
 
-        # 1. SHAP 설명 객체 생성
-        explainer = shap.Explainer(heart_model)
-        
-        # 2. 환자의 입력 데이터를 DataFrame으로 묶어 변수명을 보존합니다.
-        user_scaled_df = pd.DataFrame(user_scaled, columns=heart_cols)
-        
-        # 3. 모델의 결과(predict)가 아닌, '입력값(user_scaled_df)' 자체를 넣습니다.
-        shap_values_single = explainer(user_scaled_df)
+        with col2:
+            st.subheader("🕵️ AI 심층 분석 리포트 (XAI)")
+            
+            # 그래프 해석 가이드
+            with st.expander("❓ 그래프 수치와 기호가 궁금하신가요?"):
+                st.markdown("""
+                **좌측의 숫자 (예: 1.151)**
+                - 인공지능이 판단을 내리기 위해 변환한 **상대적 위험 점수**입니다. 
+                - 0보다 크면 평균보다 높은 상태, 작으면 낮은 상태를 의미합니다.
+                
+                **막대 속 숫자 및 색상**
+                - **빨간색 (+)**: 심장병 위험도를 **높이는** 부정적 신호입니다.
+                - **파란색 (-)**: 심장병 위험도를 **낮추는** 긍정적(건강한) 신호입니다.
+                - **맨 아래 E[f(x)]**: 데이터셋 전체의 **평균 발병 확률**(출발점)입니다.
+                - **맨 위 f(x)**: 모든 요인을 더하고 뺀 **최종 위험 확률**입니다.
+                """)
 
-        # 4. 그래프 생성 (Matplotlib과 SHAP 결합)
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
-        # 심장병 위험(Class 1)에 대한 Waterfall 플롯 생성
-        shap.plots.waterfall(shap_values_single[0, :, 1], max_display=10, show=False)
-        
-        # 폰트 크기 및 레이아웃 자동 조정
-        plt.tight_layout()
-        st.pyplot(fig)
-        st.caption("▲ 오른쪽(빨간색)으로 향하는 막대는 위험도를 높이는 요인, 왼쪽(파란색)은 낮추는 요인입니다.")
+            # 1. SHAP 설명 객체 생성
+            explainer = shap.Explainer(heart_model)
+            
+            # 2. 환자의 입력 데이터를 DataFrame으로 묶어 변수명을 보존합니다.
+            user_scaled_df = pd.DataFrame(user_scaled, columns=heart_cols)
+            
+            # 3. 모델의 결과(predict)가 아닌, '입력값(user_scaled_df)' 자체를 넣습니다.
+            shap_values_single = explainer(user_scaled_df)
 
-        
-        # --- 의학적 소견 번역 엔진 (Mapping Engine) ---
-        medical_mapping = {
-            "ST_Slope_Up": "운동 시 심장 박동 후 회복 반응이 매우 건강한 상태 (정상 상승)",
-            "ST_Slope_Flat": "운동 시 심전도 파형이 평탄함 (심장 혈류 공급 부족 가능성)",
-            "ST_Slope_Down": "운동 시 심전도 파형이 하강함 (심근 허혈 가능성 높음)",
-            "ChestPainType_ASY": "통증을 느끼지 못하는 '무증상' 가슴 답답함 (가장 주의 필요)",
-            "ChestPainType_ATA": "비전형적인 가슴 통증 (심장 질환 가능성 낮음)",
-            "ExerciseAngina_N": "운동 중 협심증(가슴 조임) 증상이 나타나지 않음",
-            "ExerciseAngina_Y": "운동 중 가슴 통증 발생 (심혈관 협착 의심)",
-            "Oldpeak": "운동 시 심전도 하강 수치 (수치가 높을수록 심장 부담 큼)",
-            "MaxHR": "최대 심박수 (수치가 높을수록 심장 펌핑 능력이 양호함)",
-            "Age": "연령에 따른 생물학적 위험도",
-            "Cholesterol": "혈중 콜레스테롤 수치",
-            "RestingBP": "안정시 혈압 수치"
-        }
+            # 4. 그래프 생성 (Matplotlib과 SHAP 결합)
+            fig, ax = plt.subplots(figsize=(10, 6))
+            
+            # 심장병 위험(Class 1)에 대한 Waterfall 플롯 생성
+            shap.plots.waterfall(shap_values_single[0, :, 1], max_display=10, show=False)
+            
+            # 폰트 크기 및 레이아웃 자동 조정
+            plt.tight_layout()
+            st.pyplot(fig)
+            st.caption("▲ 오른쪽(빨간색)으로 향하는 막대는 위험도를 높이는 요인, 왼쪽(파란색)은 낮추는 요인입니다.")
 
-        # --- AI 서술형 소견 생성 로직 ---
-        # shap_values_single[0, :, 1] 에서 값이 가장 큰(위험한) 항목 찾기
-        vals = shap_values_single[0, :, 1].values
-        feature_names = shap_values_single.feature_names
+            
+            # --- 의학적 소견 번역 엔진 (Mapping Engine) ---
+            medical_mapping = {
+                "ST_Slope_Up": "운동 시 심장 박동 후 회복 반응이 매우 건강한 상태 (정상 상승)",
+                "ST_Slope_Flat": "운동 시 심전도 파형이 평탄함 (심장 혈류 공급 부족 가능성)",
+                "ST_Slope_Down": "운동 시 심전도 파형이 하강함 (심근 허혈 가능성 높음)",
+                "ChestPainType_ASY": "통증을 느끼지 못하는 '무증상' 가슴 답답함 (가장 주의 필요)",
+                "ChestPainType_ATA": "비전형적인 가슴 통증 (심장 질환 가능성 낮음)",
+                "ExerciseAngina_N": "운동 중 협심증(가슴 조임) 증상이 나타나지 않음",
+                "ExerciseAngina_Y": "운동 중 가슴 통증 발생 (심혈관 협착 의심)",
+                "Oldpeak": "운동 시 심전도 하강 수치 (수치가 높을수록 심장 부담 큼)",
+                "MaxHR": "최대 심박수 (수치가 높을수록 심장 펌핑 능력이 양호함)",
+                "Age": "연령에 따른 생물학적 위험도",
+                "Cholesterol": "혈중 콜레스테롤 수치",
+                "RestingBP": "안정시 혈압 수치"
+            }
 
-        # 위험 요인(양수)과 건강 요인(음수) 정렬
-        top_risk_idx = np.argsort(vals)[-1] # 가장 위험한 요인
-        top_healthy_idx = np.argsort(vals)[0] # 가장 건강한 요인
+            # --- AI 서술형 소견 생성 로직 ---
+            # shap_values_single[0, :, 1] 에서 값이 가장 큰(위험한) 항목 찾기
+            vals = shap_values_single[0, :, 1].values
+            feature_names = shap_values_single.feature_names
 
-        # 인덱스를 이용해 '컬럼명'을 가져온 뒤, 사전에서 '번역문'을 찾음
-        risk_feature_name = feature_names[top_risk_idx]
-        healthy_feature_name = feature_names[top_healthy_idx]
-        
-        # 번역된 메시지 가져오기 (사전에 없으면 원래 이름 사용)
-        risk_msg = medical_mapping.get(risk_feature_name, risk_feature_name)
-        healthy_msg = medical_mapping.get(healthy_feature_name, healthy_feature_name)
+            # 위험 요인(양수)과 건강 요인(음수) 정렬
+            top_risk_idx = np.argsort(vals)[-1] # 가장 위험한 요인
+            top_healthy_idx = np.argsort(vals)[0] # 가장 건강한 요인
 
-        st.divider()
-        st.markdown(f"""
-        <div style="background-color: #f0f2f6; padding: 20px; border-radius: 8px; border-left: 6px solid #1f77b4; margin: 10px 0;">
-            <strong style="font-size: 16px; color: #0f172a; display: block; margin-bottom: 12px;">📢 AI 종합 진단 소견</strong>
-            <ul style="padding-left: 20px; margin: 0; list-style-type: disc;">
-                <li style="margin-bottom: 12px; color: #334155;">
-                    <span style='color:#ff4b4b; font-weight:bold;'>주의가 필요한 요인</span>: 
-                    현재 입력하신 정보 중 <span style='color:#ff4b4b; font-weight:bold;'>'{risk_feature_name} : {risk_msg}'</span> 항목이 당신의 심장 건강 위험을 높이는 가장 큰 원인입니다.
-                </li>
-                <li style="color: #334155;">
-                    <span style='color:#00cc96; font-weight:bold;'>긍정적인 건강 요인</span>: 
-                    반면 <span style='color:#00cc96; font-weight:bold;'>'{healthy_feature_name} : {healthy_msg}'</span> 항목은 현재 당신의 심장 건강을 유지하는 데 가장 긍정적인 기여를 하고 있습니다.
-                </li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # 리포트 텍스트 파일 생성
-        report_text = f"""=== 다중 모달리티 헬스케어 AI 진단 리포트 ===
-        [환자 입력 정보]
-        - 연령: {age}세 | 성별: {'남성' if sex=='M' else '여성'}
-        - 혈압: {resting_bp} mmHg | 콜레스테롤: {cholesterol} mg/dl
+            # 인덱스를 이용해 '컬럼명'을 가져온 뒤, 사전에서 '번역문'을 찾음
+            risk_feature_name = feature_names[top_risk_idx]
+            healthy_feature_name = feature_names[top_healthy_idx]
+            
+            # 번역된 메시지 가져오기 (사전에 없으면 원래 이름 사용)
+            risk_msg = medical_mapping.get(risk_feature_name, risk_feature_name)
+            healthy_msg = medical_mapping.get(healthy_feature_name, healthy_feature_name)
 
-        [AI 예측 결과]
-        - 심혈관 질환 위험도: {prediction_proba * 100:.1f}%
+            st.divider()
+            st.markdown(f"""
+            <div style="background-color: #f0f2f6; padding: 20px; border-radius: 8px; border-left: 6px solid #1f77b4; margin: 10px 0;">
+                <strong style="font-size: 16px; color: #0f172a; display: block; margin-bottom: 12px;">📢 AI 종합 진단 소견</strong>
+                <ul style="padding-left: 20px; margin: 0; list-style-type: disc;">
+                    <li style="margin-bottom: 12px; color: #334155;">
+                        <span style='color:#ff4b4b; font-weight:bold;'>주의가 필요한 요인</span>: 
+                        현재 입력하신 정보 중 <span style='color:#ff4b4b; font-weight:bold;'>'{risk_feature_name} : {risk_msg}'</span> 항목이 당신의 심장 건강 위험을 높이는 가장 큰 원인입니다.
+                    </li>
+                    <li style="color: #334155;">
+                        <span style='color:#00cc96; font-weight:bold;'>긍정적인 건강 요인</span>: 
+                        반면 <span style='color:#00cc96; font-weight:bold;'>'{healthy_feature_name} : {healthy_msg}'</span> 항목은 현재 당신의 심장 건강을 유지하는 데 가장 긍정적인 기여를 하고 있습니다.
+                    </li>
+                </ul>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # 리포트 텍스트 파일 생성
+            report_text = f"""=== 다중 모달리티 헬스케어 AI 진단 리포트 ===
+            [환자 입력 정보]
+            - 연령: {age}세 | 성별: {'남성' if sex=='M' else '여성'}
+            - 혈압: {resting_bp} mmHg | 콜레스테롤: {cholesterol} mg/dl
 
-        [AI 심층 소견]
-        - 가장 주의할 요인: {risk_msg}
-        - 긍정적 건강 요인: {healthy_msg}
+            [AI 예측 결과]
+            - 심혈관 질환 위험도: {prediction_proba * 100:.1f}%
 
-        * 본 리포트는 AI 통계 모델을 기반으로 작성되었습니다.
-        ============================================="""
+            [AI 심층 소견]
+            - 가장 주의할 요인: {risk_msg}
+            - 긍정적 건강 요인: {healthy_msg}
 
-        # 다운로드 버튼 생성
-        st.download_button(
-            label="📥 내 진단 리포트 다운로드 (.txt)",
-            data=report_text,
-            file_name="AI_Health_Report.txt",
-            mime="text/plain"
-        )
+            * 본 리포트는 AI 통계 모델을 기반으로 작성되었습니다.
+            ============================================="""
+
+            # 다운로드 버튼 생성
+            st.download_button(
+                label="📥 내 진단 리포트 다운로드 (.txt)",
+                data=report_text,
+                file_name="AI_Health_Report.txt",
+                mime="text/plain"
+            )
 
 # --- 5. 당뇨병 선택 시 ---
 elif disease_category == MENU_DIABETES:
+    # 사이드바: 당뇨병 AI 모델 신뢰도 및 검증 패널 (Model Card)
+    with st.sidebar:
+        st.markdown("### 🔬 AI 모델 검증 리포트")
+        st.info("본 예측 알고리즘은 글로벌 보건 기관의 대규모 역학 조사를 기반으로 최적화 과정을 거쳐 구축되었습니다.")
+        
+        st.markdown("#### 📊 **데이터 프로비넌스 (Data)**")
+        st.markdown("""
+        - **기반 데이터**: 미국 질병통제예방센터(CDC) BRFSS 2021
+        - **학습 규모**: 총 67,136명 (당뇨/정상 50:50 밸런스 데이터)
+        - **데이터 정제**: 생물학적 이상치(BMI 60 초과) 노이즈 186건 사전 제거
+        """)
+        
+        st.divider()
+        
+        st.markdown("#### 🎯 **알고리즘 성능 지표**")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            st.metric(label="예측 정확도 (Accuracy)", value="72.0%")
+        with col_b:
+            st.metric(label="F1-Score", value="0.74")
+        st.caption("* 알고리즘: `RandomForestClassifier` (n_estimators=150, max_depth=12)")
+        
+        st.divider()
+        
+        st.markdown("#### ⚖️ **핵심 입력 지표 (Top 6 UX)**")
+        st.markdown("""
+        초기 22개의 변수 중 상관관계 분석(Correlation Analysis)을 통해 사용자 입력 편의성(UX)과 예측력을 동시에 잡은 6대 지표입니다.
+        1. **GenHlth** (주관적 건강 상태)
+        2. **HighBP** (고혈압 진단 여부)
+        3. **Age** (연령대)
+        4. **HighChol** (고콜레스테롤)
+        5. **BMI** (체질량지수)
+        6. **PhysActivity** (최근 30일 신체 활동)
+        """)
+        
+        st.divider()
+        
+        st.markdown("#### 🛡️ **보안 및 개인정보 보호**")
+        st.caption("본 시스템은 환자의 식별정보(PII)를 서버에 저장하지 않으며, 제출된 데이터는 메모리 내 휘발성 연산(In-memory processing) 후 즉시 폐기됩니다.")
+
+    # --- 메인 화면 렌더링 시작 ---
     st.title("🩸 AI 기반 당뇨병 발병 위험도 예측 및 시뮬레이터")
     
     if diabetes_model is None or diabetes_scaler is None:
@@ -397,111 +511,144 @@ elif disease_category == MENU_DIABETES:
                 </p>
             </div>
             """, unsafe_allow_html=True)
+        st.markdown("---")
 
-        # --- 사이드바 UI 이식 ---
-        st.sidebar.header("📋 당뇨 위험인자 입력")
-        
-        gen_hlth = st.sidebar.slider("평소 건강 상태 (1:최고 ~ 5:최악)", 1, 5, 3, help="주관적인 본인의 건강상태\n\n1: 아주 좋음\n\n5: 아주 나쁨")
-        high_bp = st.sidebar.selectbox("고혈압 진단 여부", [0, 1], format_func=lambda x: "예" if x==1 else "아니오", help="고혈압 여부\n\n0: 없음\n\n1: 고혈압 진단받음")
-        high_chol = st.sidebar.selectbox("고콜레스테롤 여부", [0, 1], format_func=lambda x: "예" if x==1 else "아니오", help="고콜레스테롤 여부\n\n0: 없음\n\n1: 고콜레스테롤 진단받음")
-        age = st.sidebar.number_input("연령대 코드 (1~13)", 1, 13, 5, help="연령대 코드\n\n1: 18-24세   2: 25-29세  3: 30-34세  4: 35-39세  5: 40-44세\n\n6: 45-49세    7: 50-54세  8: 55-59세  9: 60-64세  10: 65-69세\n\n11: 70-74세 12: 75-79세 13: 80세 이상")
-        bmi = st.sidebar.number_input("BMI 지수", 10.0, 60.0, 25.0, step=0.1, help="체질량지수(BMI) = 체중(kg) / 키(m)²")
-        phys_act = st.sidebar.selectbox("한 달간 운동 여부", [0, 1], format_func=lambda x: "예" if x==1 else "아니오", help="한 달간 신체 활동 여부\n\n0: 운동 안함\n\n1: 운동 함")
+        with st.form("health_form"):
+            st.subheader("📋 개인 건강 정보 입력")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # 1. 평소 건강 상태 선택창
+                gen_hlth_label = st.selectbox(
+                    "평소 주관적인 건강 상태",
+                    ["-", "아주 좋음 (Excellent)", "좋음 (Good)", "보통 (Fair)", "나쁨 (Poor)", "아주 나쁨 (Very Poor)"]
+                )
+                
+                # 2. 고혈압 및 콜레스테롤 여부
+                high_bp = st.selectbox("고혈압 진단 여부", [0, 1], format_func=lambda x: "예" if x==1 else "아니오", help="고혈압 여부\n\n0: 없음\n\n1: 고혈압 진단받음")
+                high_chol = st.selectbox("고콜레스테롤 진단 여부", [0, 1], format_func=lambda x: "예" if x==1 else "아니오", help="고콜레스테롤 여부\n\n0: 없음\n\n1: 고콜레스테롤 진단받음")
+                
+            with col2:
+                # 3. 연령대 입력
+                age = st.number_input("연령대 코드 (1~13)", 1, 13, 5, help="연령대 코드\n\n1: 18-24세   2: 25-29세  3: 30-34세  4: 35-39세  5: 40-44세\n\n6: 45-49세    7: 50-54세  8: 55-59세  9: 60-64세  10: 65-69세\n\n11: 70-74세 12: 75-79세 13: 80세 이상")
+                
+                # BMI 직접 입력 대신 키와 몸무게로 실시간 자동 계산
+                st.markdown("**📊 BMI(비만도) 자동 계산**")
+                height = st.number_input("키 (cm)", min_value=100.0, max_value=250.0, value=170.0, step=0.1)
+                weight = st.number_input("몸무게 (kg)", min_value=30.0, max_value=200.0, value=65.0, step=0.1)
+                
+                # 공식: 몸무게(kg) / (키(m)의 제곱)
+                height_m = height / 100.0
+                simulated_bmi = weight / (height_m ** 2)
+                
+                # 화면에 실시간으로 계산된 BMI 수치를 보여주기 (소수점 첫째자리까지)
+                st.info(f"💡 BMI: **{simulated_bmi:.1f}**")
+                
+                # 4. 운동 습관 선택창
+                phys_act_label = st.selectbox(
+                    "최근 한 달간 신체 활동 및 운동 습관",
+                    [   
+                        "-",
+                        "숨이 차는 운동을 주 3회 이상 정기적으로 수행함",
+                        "주 1~2회 가벼운 산책등 간헐적인 활동을 함",
+                        "최근 한 달 동안 거의 운동을 하지 않음"
+                    ]
+                )
 
-        # --- 데이터 전처리 및 예측 ---
-        input_data = [[gen_hlth, high_bp, age, high_chol, bmi, phys_act]]
-        input_df = pd.DataFrame(input_data, columns=['GenHlth', 'HighBP', 'Age', 'HighChol', 'BMI', 'PhysActivity'])
-        
-        input_scaled = diabetes_scaler.transform(input_df)
-        prob = diabetes_model.predict_proba(input_scaled)[0][1] * 100
+            submit = st.form_submit_button("🚀 위험도 분석 시작")
 
-        # --- 메인 화면 결과 출력 ---
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.subheader("진단 결과")
-            if prob >= 50:
-                st.error("🚨 **위험 (High Risk)**: 당뇨 발병 가능성이 매우 높습니다. 전문의 상담이 필요합니다.")
-            elif prob >= 30:
-                st.warning("⚠️ **주의 (Moderate Risk)**: 당뇨 발병 전단계일 가능성이 있습니다. 관리가 필요합니다.")
+        # 버튼을 눌렀을 때 실행되는 구역
+        if submit:
+            # 예외 안전장치: 사용자가 하나라도 "-" 상태로 놔두고 버튼을 눌렀을 때 경고 띄우기
+            if gen_hlth_label == "-" or phys_act_label == "-":
+                st.warning("⚠️ 선택하지 않은 항목이 있습니다. 모든 건강 정보를 올바르게 선택해 주세요!")
             else:
-                st.success("✨ **안전 (Low Risk)**: 현재 혈당 관련 지표가 안정적입니다.")
-            
-            st.metric(label="AI 예측 당뇨 발병 확률", value=f"{prob:.1f}%")
-            st.progress(prob / 100.0)
+                # 1. 평소 건강 상태 문장을 숫자로 변환
+                hlth_map = {
+                    "아주 좋음 (Excellent)": 1,
+                    "좋음 (Good)": 2,
+                    "보통 (Fair)": 3,
+                    "나쁨 (Poor)": 4,
+                    "아주 나쁨 (Very Poor)": 5
+                }
+                gen_hlth = hlth_map[gen_hlth_label]
 
-        # --- 혁신 기능: What-If 시뮬레이터 ---
-        with col2:
-            st.subheader("💡 라이프스타일 개선 시뮬레이션")
-            st.info("현재 상태에서 통제 가능한 요인(운동, 체중)을 개선했을 때의 효과를 계산합니다.")
-            
-            # 시나리오: 운동을 안하던 사람이 운동을 시작하고, BMI를 2.0 감량했을 때
-            simulated_bmi = max(10.0, bmi - 2.0) # BMI가 10 이하로 떨어지지 않게 방어 로직
-            simulated_act = 1 # 무조건 운동을 한다고 가정
-            
-            sim_df = pd.DataFrame([[gen_hlth, high_bp, age, high_chol, simulated_bmi, simulated_act]], 
-                                  columns=['GenHlth', 'HighBP', 'Age', 'HighChol', 'BMI', 'PhysActivity'])
-            sim_scaled = diabetes_scaler.transform(sim_df)
-            sim_prob = diabetes_model.predict_proba(sim_scaled)[0][1] * 100
-            
-            prob_diff = prob - sim_prob
-            
-            if prob_diff > 0:
-                st.metric(label="개선 후 예상 당뇨 발병 확률", value=f"{sim_prob:.1f}%", delta=f"-{prob_diff:.1f}% 감소", delta_color="inverse")
-                st.markdown(f"**Action Plan:** 한 달간 꾸준히 운동을 시작하고 체중을 조절하여 BMI를 2.0 낮추면, 당뇨 발병 위험을 **{prob_diff:.1f}%p** 낮출 수 있습니다.")
-            else:
-                st.metric(label="개선 후 예상 당뇨 발병 확률", value=f"{sim_prob:.1f}%", delta="추가 감소 여력 낮음", delta_color="off")
-                st.markdown("**Action Plan:** 현재 이미 훌륭한 생활 습관을 유지하고 있습니다. 지금의 운동량과 체중을 유지하세요.")
+                # 2. 운동 습관 문장을 숫자로 변환
+                act_map = {
+                    "숨이 차는 운동을 주 3회 이상 정기적으로 수행함": 1,
+                    "주 1~2회 가벼운 산책등 간헐적인 활동을 함": 1,
+                    "최근 한 달 동안 거의 운동을 하지 않음": 0
+                }
+                phys_act = act_map[phys_act_label]
+
+                # 3. 인공지능 예측 수행 (위에서 자동 계산된 simulated_bmi 변수가 그대로 들어갑니다)
+                input_df = pd.DataFrame([[gen_hlth, high_bp, age, high_chol, simulated_bmi, phys_act]], 
+                                        columns=['GenHlth', 'HighBP', 'Age', 'HighChol', 'BMI', 'PhysActivity'])
+                input_scaled = diabetes_scaler.transform(input_df)
+                prob = diabetes_model.predict_proba(input_scaled)[0][1] * 100
+
+                st.divider()
+                st.subheader(f"분석 결과: 당뇨 위험 확률 {prob:.1f}%")
+                if prob >= 50:
+                    st.error("🚨 위험: 당뇨 가능성이 높습니다. 전문의와 상담하세요.")
+                else:
+                    st.success("✨ 안전: 현재 수치는 안정적입니다.")
         
-    st.divider()
-    st.subheader("📊 환자 건강 지표 상대적 포지셔닝 (BMI 기준)")
-    
-    # 원본 데이터를 메모리에 캐싱하여 로드 속도 최적화
-    @st.cache_data
-    def load_visual_data():
-        # 멘티가 업로드한 데이터셋 활용
-        return pd.read_csv('diabetes_binary_5050split_health_indicators_BRFSS2021.csv')
-    
-    try:
-        df_vis = load_visual_data()
-        import matplotlib.pyplot as plt
-        import seaborn as sns
-        import matplotlib.font_manager as fm # 상단에 없다면 추가
-        
-        # 폰트 파일 경로 정의 및 폰트 객체 생성
-        font_path = "NanumGothic.ttf"
-        fe = fm.FontEntry(fname=font_path, name='NanumGothic')
-        fm.fontManager.ttflist.insert(0, fe) # 폰트 매니저 헤드에 강제 인서트
-        
-        # 명시적으로 사용할 폰트 프로퍼티 정의 (C언어의 구조체 정의와 유사)
-        korean_font = fm.FontProperties(fname=font_path)
-        
-        fig, ax = plt.subplots(figsize=(10, 4))
-        
-        # 분포도 그리기
-        sns.kdeplot(data=df_vis[df_vis['Diabetes_binary'] == 0], x='BMI', fill=True, color="cornflowerblue", label="정상 그룹 밀집도 (Safe)", ax=ax)
-        sns.kdeplot(data=df_vis[df_vis['Diabetes_binary'] == 1], x='BMI', fill=True, color="indianred", label="당뇨 그룹 밀집도 (Risk)", ax=ax)
-        
-        # 환자 마커
-        ax.axvline(bmi, color='black', linestyle='--', linewidth=2.5, label=f"현재 환자 위치 (BMI: {bmi:.1f})")
-        if 'simulated_bmi' in locals() and simulated_bmi < bmi:
-            ax.axvline(simulated_bmi, color='green', linestyle='-.', linewidth=2.5, label=f"행동 개선 후 목표 위치 (BMI: {simulated_bmi:.1f})")
-            
-        # 🔥 [핵심 변경 포인트] fontproperties 인자를 사용하여 시스템 캐시를 우회하고 직접 주입
-        ax.set_title("전체 환자 통계 대비 나의 체질량지수(BMI) 위치 분석", fontproperties=korean_font, fontsize=14, fontweight='bold')
-        ax.set_xlabel("BMI 지수", fontproperties=korean_font, fontsize=12)
-        ax.set_ylabel("데이터 밀집도 (Density)", fontproperties=korean_font, fontsize=12)
-        
-        # 범례(Legend) 한글 깨짐 방지 처리
-        ax.legend(prop=korean_font, loc='upper right')
-        
-        ax.set_xlim(10, 60)
-        ax.set_yticks([]) 
-        fig.patch.set_facecolor('white')
-        st.pyplot(fig)
-        
-    except FileNotFoundError:
-        st.warning("⚠️ 시각화용 원본 데이터셋 파일을 찾을 수 없습니다.")
+                st.divider()
+                st.subheader("📊 환자 건강 지표 상대적 포지셔닝 (BMI 기준)")
+                
+                # 원본 데이터를 메모리에 캐싱하여 로드 속도 최적화
+                @st.cache_data
+                def load_visual_data():
+                    # 멘티가 업로드한 데이터셋 활용
+                    return pd.read_csv('diabetes_binary_5050split_health_indicators_BRFSS2021.csv')
+                
+                try:
+                    df_vis = load_visual_data()
+                    
+                    # 폰트 파일 경로 정의 및 폰트 객체 생성
+                    font_path = "NanumGothic.ttf"
+                    fe = fm.FontEntry(fname=font_path, name='NanumGothic')
+                    fm.fontManager.ttflist.insert(0, fe) # 폰트 매니저 헤드에 강제 인서트
+                    
+                    # 명시적으로 사용할 폰트 프로퍼티 정의 (C언어의 구조체 정의와 유사)
+                    korean_font = fm.FontProperties(fname=font_path)
+                    
+                    fig, ax = plt.subplots(figsize=(10, 4))
+                    
+                    # 1. 분포도 그리기 (기존 로직 유지)
+                    sns.kdeplot(data=df_vis[df_vis['Diabetes_binary'] == 0], x='BMI', fill=True, color="cornflowerblue", label="정상 그룹 밀집도 (Safe)", ax=ax)
+                    sns.kdeplot(data=df_vis[df_vis['Diabetes_binary'] == 1], x='BMI', fill=True, color="indianred", label="당뇨 그룹 밀집도 (Risk)", ax=ax)
+                    
+                    # 💡 혁신 포인트: 의학적 정상 권장 구간(Safe Zone) 시각적 하이라이팅
+                    ax.axvspan(18.5, 24.9, color='limegreen', alpha=0.15, label="임상적 권장 정상 구간 (18.5~24.9)")
+                    
+                    # 2. 환자의 현재 위치 마커 (단일 진실 공급원인 simulated_bmi만 사용)
+                    ax.axvline(simulated_bmi, color='black', linestyle='-', linewidth=2.5, label=f"현재 환자 위치 (BMI: {simulated_bmi:.1f})")
+                    
+                    # 3. 에러 발생했던 레거시 코드 제거 후, AI 동적 목표치 로직 도입
+                    # 현재 BMI가 25 이상(과체중/비만)일 경우에만 건강한 목표점(23.0)을 시각적으로 넛지(Nudge)함
+                    if simulated_bmi >= 25.0:
+                        target_bmi = 23.0
+                        ax.axvline(target_bmi, color='green', linestyle='--', linewidth=2.5, label=f"AI 권고 목표 위치 (BMI: {target_bmi:.1f})")
+                        
+                        # 그래프 내부에 화살표 주석 추가 (현재 위치 -> 목표 위치)
+                        ax.annotate('감량 목표', xy=(target_bmi, ax.get_ylim()[1]*0.5), 
+                                    xytext=(simulated_bmi, ax.get_ylim()[1]*0.5),
+                                    arrowprops=dict(facecolor='green', shrink=0.05, width=2, headwidth=8),
+                                    fontsize=12, color='green', fontproperties=korean_font,
+                                    horizontalalignment='center')
+
+                    # 한글 폰트가 범례에 깨지지 않도록 prop 속성에 강제 바인딩
+                    ax.legend(prop=korean_font, loc='upper right')
+                    
+                    ax.set_xlim(10, 60)
+                    ax.set_yticks([]) 
+                    fig.patch.set_facecolor('white')
+                    st.pyplot(fig)
+                    
+                except FileNotFoundError:
+                    st.warning("⚠️ 시각화용 원본 데이터셋 파일을 찾을 수 없습니다.")
 
 # --- 뇌졸중 선택 시 ---
 elif disease_category == MENU_STROKE:
@@ -703,17 +850,29 @@ elif disease_category == MENU_STROKE:
 
     def main():
         # 헤더
-        st.markdown("## 🧠 뇌졸중 위험도 예측")
-        st.markdown("개인 건강 정보를 입력하면 AI가 뇌졸중 위험도를 분석하고 맞춤 개선사항을 제공합니다.")
+        st.markdown("## 🧠 뇌졸중 위험도 예측 시스템")
+        st.markdown("현재 **[뇌졸중 부문]** 진단 모듈이 가동 중입니다. 좌측의 임상 데이터를 변경하여 실시간 예측을 확인하세요.")
+
+        with st.expander("🚨 이용 전 필독: 의료적 면책 조항 확인", expanded=True):
+            st.markdown("""
+            <div style="border: 2px solid #ff4b4b; padding: 15px; border-radius: 5px; background-color: #fff1f1;">
+                <h4 style="color: #ff4b4b; margin-top: 0;">⚠️ 의료적 면책 조항</h4>
+                <p style="font-size: 0.9em; color: #31333f; line-height: 1.6;">
+                    본 시스템은 <strong>AI 기반 참고용 건강관리 도구</strong>입니다.<br>
+                    질병의 진단이나 처방을 목적으로 하지 않으며, <span style="color:red; font-weight:bold;">전문 의료진의 진단을 대체할 수 없습니다.</span><br><br>
+                    이상 증상 발생 시 <span style="color:red; font-weight:bold;">반드시 의료기관을 방문</span>하셔야 하며, 
+                    응급 상황 시에는 <span style="color:red; font-weight:bold;">즉시 119에 연락</span>하시기 바랍니다.
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
         st.markdown("---")
 
         # 모델 로드
-        stroke_model, stroke_cols, stroke_auc = load_stroke_model()
         if stroke_model is None:
             st.error("⚠️ `healthcare-dataset-stroke-data.csv` 파일을 앱과 같은 폴더에 넣어주세요.")
             st.stop()
 
-        st.caption(f"모델 성능 — ROC-AUC: **{stroke_auc}** | 학습 데이터: 5,109명 | 위험 임계값: ≥30% 고위험")
+        st.markdown("개인 건강 정보를 입력하면 AI가 뇌졸중 위험도를 분석하고 맞춤 개선사항을 제공합니다.")
 
         # ── 입력 폼 ──────────────────────────────────────────
         with st.form("input_form"):
@@ -757,6 +916,8 @@ elif disease_category == MENU_STROKE:
                 st.info("💡 모든 정보는 예측에만 사용되며 저장되지 않습니다.")
 
             submitted = st.form_submit_button("🔍 위험도 분석하기", use_container_width=True, type="primary")
+        
+        st.caption(f"모델 성능 — ROC-AUC: **{stroke_auc}** | 학습 데이터: 5,109명 | 위험 임계값: ≥30% 고위험")
 
         # ── 결과 출력 ─────────────────────────────────────────
         if submitted:
@@ -914,4 +1075,4 @@ else:
     st.error("🚨 시스템 라우팅 오류가 발생했습니다. 정의되지 않은 카테고리 접근입니다.")
     st.warning("개발자 콘솔을 확인하거나 사이드바 상수를 동기화하십시오.")
     
-# python -m streamlit run health_dashboard.py
+# python -m streamlit run health_dashboard_modi.py
